@@ -1,0 +1,71 @@
+# Two checks on every pull request into master. The core must compile on ABAP 7.40 SP08 and
+# in ABAP Cloud, with the same source.
+#
+# syntax-740   abaplint.json: the syntax of SAP_BASIS 7.40 SP08. Statements and expressions
+#              that only exist on a later release are reported. A newer development system
+#              accepts them, so ATC there cannot find these.
+#
+# abap-cloud   abaplint-cloud.json: the ABAP Cloud language version. Reported are
+#              - statements that do not exist in ABAP Cloud (WRITE, MOVE, SUBMIT, ...),
+#              - object types that cannot exist in the cloud (reports, function groups, ...),
+#              - every class, interface, table, type or function module that is neither in
+#                this repository nor released in ABAP Cloud AND present on 7.40. The list of
+#                those SAP objects comes from
+#                https://github.com/abapedia/steampunk-2305-api-intersect-740.
+#              So the core can only use its own objects and that common set.
+#
+# Every finding fails the check: the repository starts empty, so there are no old findings.
+#
+# clean-abap  abaplint-clean.json: the rules of SAP's Clean ABAP guide that abaplint can check
+#              (naming, no obsolete statements, aligned parameters, short methods, low nesting).
+#              The patterns of the naming rules are the ones of the guide, not abaplint's defaults.
+# These checks are fast and run on every change; the proofs stay the activation on a 7.40
+# system and the pull into the cloud package.
+name: abaplint
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-740:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: abaplint, ABAP 7.40 SP08
+        run: |
+          if [ -z "$(find src -type f 2>/dev/null | head -1)" ]; then echo "No sources yet."; exit 0; fi
+          npx --yes @abaplint/cli@2.120.67 abaplint.json --format json > abaplint-result.json || true
+          node .github/abaplint-annotate.js abaplint-result.json "abaplint 7.40"
+
+  abap-cloud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: abaplint, ABAP Cloud
+        run: |
+          if [ -z "$(find src -type f 2>/dev/null | head -1)" ]; then echo "No sources yet."; exit 0; fi
+          npx --yes @abaplint/cli@2.120.67 abaplint-cloud.json --format json > abaplint-result-cloud.json || true
+          node .github/abaplint-annotate.js abaplint-result-cloud.json "abaplint ABAP Cloud"
+
+  clean-abap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: abaplint, Clean ABAP
+        run: |
+          if [ -z "$(find src -type f 2>/dev/null | head -1)" ]; then echo "No sources yet."; exit 0; fi
+          npx --yes @abaplint/cli@2.120.67 abaplint-clean.json --format json > abaplint-result-clean.json || true
+          node .github/abaplint-annotate.js abaplint-result-clean.json "abaplint Clean ABAP"

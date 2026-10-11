@@ -1,0 +1,117 @@
+{
+ "global": {
+  "files": "/src/**/*.*"
+ },
+ "syntax": {
+  "version": "v740sp08",
+  "errorNamespace": "^(Z|Y|LCL_|LTC_|LIF_|LTD_)"
+ },
+ "rules": {
+  "align_parameters": true,
+  "avoid_use": true,
+  "change_if_to_case": true,
+  "chain_mainly_declarations": true,
+  "check_subrc": true,
+  "class_attribute_names": {
+   "instance": "^[a-z][a-z0-9_]*$",
+   "static": "^[a-z][a-z0-9_]*$",
+   "constants": "^[a-z][a-z0-9_]*$",
+   "exceptions": "^[a-z][a-z0-9_]*$"
+  },
+  "clear_exporting_parameters": true,
+  "colon_missing_space": true,
+  "constructor_visibility_public": true,
+  "cyclomatic_complexity": {
+   "max": 10
+  },
+  "double_space": true,
+  "else_after_all_returns": true,
+  "empty_line_in_statement": true,
+  "empty_statement": true,
+  "empty_structure": true,
+  "exit_or_check": true,
+  "exporting": true,
+  "fully_type_constants": true,
+  "fully_type_itabs": true,
+  "functional_writing": true,
+  "identical_conditions": true,
+  "identical_contents": true,
+  "if_in_if": true,
+  "indentation": true,
+  "keep_single_parameter_on_one_line": true,
+  "keyword_case": {
+   "style": "upper",
+   "ignoreGlobalClassBegin": true
+  },
+  "line_break_multiple_parameters": true,
+  "line_length": {
+   "length": 120
+  },
+  "local_variable_names": {
+   "expectedData": "^[a-z][a-z0-9_]*$",
+   "expectedConstant": "^[a-z][a-z0-9_]*$",
+   "expectedFS": "^<[a-z][a-z0-9_]*>$"
+  },
+  "many_parentheses": true,
+  "max_one_method_parameter_per_line": true,
+  "max_one_statement": true,
+  "method_length": {
+   "statements": 30
+  },
+  "method_parameter_names": {
+   "importing": "^[a-z][a-z0-9_]*$",
+   "exporting": "^[a-z][a-z0-9_]*$",
+   "returning": "^result$",
+   "changing": "^[a-z][a-z0-9_]*$"
+  },
+  "mix_returning": true,
+  "nesting": {
+   "depth": 3
+  },
+  "newline_between_methods": true,
+  "no_aliases": true,
+  "no_chained_assignment": true,
+  "no_comments_between_methods": true,
+  "no_prefixes": true,
+  "no_public_attributes": {
+   "allowReadOnly": true,
+   "exclude": [
+    "[.]testclasses[.]"
+   ]
+  },
+  "no_yoda_conditions": true,
+  "nrob_consistency": true,
+  "obsolete_statement": true,
+  "omit_parameter_name": true,
+  "omit_receiving": true,
+  "prefer_abap_bool_values": true,
+  "prefer_corresponding": true,
+  "prefer_insert_into_table": true,
+  "prefer_is_not": true,
+  "prefer_pragmas": true,
+  "prefer_returning_to_exporting": true,
+  "prefer_string_template": true,
+  "prefer_xsdbool": true,
+  "redundant_conversion": true,
+  "reduce_string_templates": true,
+  "select_single_full_key": true,
+  "sequential_blank": true,
+  "short_case": true,
+  "space_before_dot": true,
+  "static_call_via_instance": true,
+  "sy_modification": true,
+  "unnecessary_chaining": true,
+  "unnecessary_loop_guard": true,
+  "unnecessary_pragma": true,
+  "unnecessary_return": true,
+  "unreachable_code": true,
+  "use_bool_expression": true,
+  "use_class_based_exceptions": true,
+  "use_line_exists": true,
+  "use_new": true,
+  "when_others_last": true,
+  "whitespace_end": true,
+  "parser_error": true,
+  "check_syntax": true
+ }
+}

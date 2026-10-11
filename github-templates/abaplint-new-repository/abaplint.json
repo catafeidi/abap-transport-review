@@ -1,0 +1,15 @@
+{
+  "global": {
+    "files": "/src/**/*.*",
+    "exclude": [],
+    "noIssues": []
+  },
+  "dependencies": [],
+  "syntax": {
+    "version": "v740sp08",
+    "errorNamespace": "^(Z|Y|LCL_|LTC_|LIF_|LTD_)"
+  },
+  "rules": {
+    "parser_error": true
+  }
+}

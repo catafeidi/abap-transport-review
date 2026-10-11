@@ -1,0 +1,49 @@
+# ABAP 7.40 syntax check on every pull request into master.
+#
+# abaplint parses the ABAP sources with the syntax of SAP_BASIS 7.40 at the support package
+# in abaplint.json ("syntax.version"): statements and expressions that only exist on a later
+# release or support package are reported. The development system is S/4HANA 2023 and accepts
+# them, so ATC there cannot find these; this check can.
+#
+# Every finding fails the check: the repository starts empty, so there are no old findings.
+#
+# clean-abap  abaplint-clean.json: the rules of SAP's Clean ABAP guide that abaplint can check
+#              (naming, no obsolete statements, aligned parameters, short methods, low nesting).
+#              The patterns of the naming rules are the ones of the guide, not abaplint's defaults.
+# GitHub has no SAP dictionary, so only the syntax rule (parser_error) is used; ATC on the SAP
+# system stays the full check.
+name: abaplint
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-740:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: abaplint, ABAP 7.40 SP08
+        run: |
+          if [ -z "$(find src -type f 2>/dev/null | head -1)" ]; then echo "No sources yet."; exit 0; fi
+          npx --yes @abaplint/cli@2.120.67 abaplint.json --format json > abaplint-result.json || true
+          node .github/abaplint-annotate.js abaplint-result.json "abaplint 7.40"
+
+  clean-abap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: abaplint, Clean ABAP
+        run: |
+          if [ -z "$(find src -type f 2>/dev/null | head -1)" ]; then echo "No sources yet."; exit 0; fi
+          npx --yes @abaplint/cli@2.120.67 abaplint-clean.json --format json > abaplint-result-clean.json || true
+          node .github/abaplint-annotate.js abaplint-result-clean.json "abaplint Clean ABAP"

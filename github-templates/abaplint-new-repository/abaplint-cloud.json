@@ -1,0 +1,24 @@
+{
+  "global": {
+    "files": "/src/**/*.*",
+    "exclude": [],
+    "noIssues": []
+  },
+  "dependencies": [
+    {
+      "url": "https://github.com/abapedia/steampunk-2305-api-intersect-740",
+      "folder": "/deps",
+      "files": "/src/**/*.*"
+    }
+  ],
+  "syntax": {
+    "version": "Cloud",
+    "errorNamespace": "."
+  },
+  "rules": {
+    "parser_error": true,
+    "cloud_types": true,
+    "check_syntax": true,
+    "unknown_types": true
+  }
+}

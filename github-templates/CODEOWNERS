@@ -1,0 +1,9 @@
+# Reviewers requested by GitHub on every pull request.
+# Copy this file to .github/CODEOWNERS of the product repository and put
+# the GitHub user names of your reviewers in place of the placeholders.
+# GitHub never asks the author of the pull request, so with two names each
+# developer gets the other one. One line per person to change it.
+# The ruleset of github-protect-master.sh does not require a code owner
+# approval (require_code_owner_review is false): any colleague with write
+# access may approve. Set it to true to make the owners mandatory.
+*  @owner-one  @owner-two
