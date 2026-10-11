@@ -39,12 +39,12 @@ It is not meant for the cloud editions of S/4HANA or the BTP ABAP environment, a
 ## How it works
 
 1. **Work as usual.** A developer changes objects in a request with tasks, in SAP GUI or in Eclipse ADT. The short text of the request starts with the issue key ([below](#linking-issues-pull-requests-and-merges)).
-2. **Release a task.** The release check makes sure the developer is logged in to GitHub (a popup in SAP GUI the first time). A background job then commits the objects of that task to the branch `review/<request>`, opens a pull request from it, if there is none yet, and sends the link to the developer's SAP inbox.
+2. **Release a task.** The release check makes sure the developer is logged in to GitHub (a popup in SAP GUI the first time). A background job then commits the objects of that task to the branch `review/<request>`, opens a pull request from it, if there is none yet, and sends the link to the developer's SAP inbox. What abapGit cannot write, such as table rows, report variants and authorization profiles, goes along as JSON files under `content/` in the same commit, so it is reviewed too ([below](#objects-that-abapgit-cannot-write-the-content-folder)).
 3. **Review on GitHub.** The checks of the repository run on the pull request (abaplint, and Copilot if you turned it on). A colleague reads the diff, comments and approves. The reviewer approves; the reviewer does **not** merge. The author cannot approve their own pull request. By default a colleague who pushed a later commit can still approve; the ruleset option "require approval of the most recent reviewable push" closes that.
 4. **Rework, if the review asks for changes.** The developer does not touch the pull request. They create a **new task in the same request**, make the changes and release that task. The job adds a **new commit to the same branch**, so the same pull request shows the new change. A new commit dismisses the approvals given before (with the ruleset of this project), so the reviewer looks again. This repeats until the pull request is approved and all conversations are resolved.
 5. **Release the request.** The release check compares the objects of the request with the approved pull request. If it is approved and nothing changed since, the release goes on. If it is not approved, or an object changed after the last push, the release is refused with the reason, and a changed object is pushed to the same pull request so that it can be reviewed again.
 6. **The merge happens from SAP, never on GitHub.** When the request is released in SAP, a job squashes and merges the pull request into the base branch, through the GitHub App. Nobody merges on GitHub, and a rule on the repository enforces it: only the release in SAP, or an administrator, can update the base branch ([`github-templates/github-restrict-merge.sh`](github-templates/github-restrict-merge.sh)). The reason is that the base branch must contain only what has been released. Without the rule, somebody could merge an approved pull request while the request is still open, and then a new task in that request, with a change that was never reviewed, would be released after the merge; Git would no longer show what was reviewed and what the transport delivers. The commit title is the request text followed by the number of the pull request, so the issue tracker shows the merge. The rule is a ruleset of GitHub, not part of the ABAP code: set it up as described in [docs/GITHUB-REPOSITORY-SETUP.md](docs/GITHUB-REPOSITORY-SETUP.md), and test it on your repository first, because whether GitHub accepts the merge of the App for a developer without administrator rights is not proven by this project.
-7. **Transport as before.** The transport request moves to the other systems in the way your landscape does it today. Git holds the reviewed copy; it does not deploy.
+7. **Transport as before.** The transport request moves to the other systems in the way your landscape does it today. Git holds the reviewed copy; it does not deploy. If a change reaches another system through Git instead, abapGit brings the objects and the report `ZTR_APPLY_CONTENT` brings the `content/` files.
 
 Who sees what: the **developer** works in SAP and reads refusals as a popup (SAP GUI) or an error message (ADT); the **reviewer** works only on GitHub; the **administrator** sets the branch rules once and can merge by hand in an emergency. Details: [docs/WORKFLOW.md](docs/WORKFLOW.md).
 
@@ -122,6 +122,27 @@ Write `#NOREVIEW` anywhere in the short text of a **request**, upper or lower ca
 - **It is visible.** The marker stays in the description of the request. To list the requests that used it, read table `E07T` for descriptions containing `#NOREVIEW` (SE16).
 - **It only affects the release of the request.** Tasks are not affected.
 - **Nobody checks who writes it.** Anyone who may change the request text can use it. If that is a problem for you, review the list of requests with the marker regularly, and write the reason into the documentation of the request.
+
+## Objects that abapGit cannot write: the `content/` folder
+
+abapGit turns repository objects (classes, interfaces, tables, programs and so on) into files under `src/`. A transport carries more than that: table rows, report variants, authorization profiles, old OTR texts, ALV layouts and SAP Note entries. This project writes them as JSON files under `content/`, in the same commit and the same pull request as the objects, so a reviewer sees them too.
+
+| Entry of the transport | File |
+|---|---|
+| Table rows (delivered content and customizing) | `content/tables/<table>.json`, one object for each row, sorted by key, without the client |
+| Report variants | `content/variants/<report>.<variant>.json`: header, texts and values |
+| SAP Note entries | `content/notes/<entry>.json`: the note number and the version, not SAP's code |
+| Anything else | not written; the pull request lists it under "Not in Git" |
+
+**Bringing it into another system.** abapGit pulls only `src/`. The report `ZTR_APPLY_CONTENT` does the rest:
+
+1. Create the request for the change and pull the objects with abapGit into it.
+2. Run the report as a test run. For each file it lists the rows and variants that are new, different, equal and only on this system. Nothing is changed.
+3. Run it with "Write" and that request. The keys are recorded in the request first, then the rows are written. The request travels on like any other.
+
+The report writes only what the tools themselves write to Git: tables of packages under Git that SAP delivers as content (delivery class E, S or G) or that you list, and variants of reports of those packages. Each write needs the authorization `S_TABU_NAM` for the table. Credential fields are never taken from Git. SAP Note entries are only reported; you implement the note in SNOTE.
+
+Set `ZTR_REQUIRE_COMPLETE` to refuse a request that holds something that cannot be written to Git. All details, the file formats and the limits: [docs/NOT-IN-GIT.md](docs/NOT-IN-GIT.md).
 
 ## Eclipse ADT and Claude Code
 
