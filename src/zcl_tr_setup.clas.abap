@@ -689,7 +689,7 @@ CLASS zcl_tr_setup IMPLEMENTATION.
     ENDIF.
 
     " Asks GitHub for a device code, as the login does. The code is not
-    " used and expires by itself.
+    " used and expires on its own.
     DATA(client_id) = parameter( parameter_name-client_id ).
     IF client_id IS NOT INITIAL.
       http( EXPORTING method = `POST` url = `https://github.com/login/device/code`

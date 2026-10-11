@@ -68,7 +68,7 @@ One firewall rule per SAP system. A browser on another machine gets "connection 
 }
 ```
 
-`version` is the lowest release your code must run on. The same check can run on GitHub on every pull request (`github-templates/abaplint/`, only files changed by the pull request count). That is the one thing ATC on a recent system cannot check by itself: statements that exist since a later support package activate on a newer system but fail on an older one.
+`version` is the lowest release your code must run on. The same check can run on GitHub on every pull request (`github-templates/abaplint/`, only files changed by the pull request count). That is the one thing ATC on a recent system cannot check automatically: statements that exist since a later support package activate on a newer system but fail on an older one.
 
 Settings in `ZTR_SETUP`, block "abaplint client (only if it is installed)":
 

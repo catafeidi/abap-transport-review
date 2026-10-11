@@ -118,7 +118,7 @@ Two things to know:
 
 Write `#NOREVIEW` anywhere in the short text of a **request**, upper or lower case, for example `#NOREVIEW ABC-123 Fix posting run`. The release of that request then skips the check: no login check, no review check and no merge job. Use it for an emergency, not to save time.
 
-- **What still happens.** The tasks of the request were pushed when they were released and have their pull requests as usual. Those pull requests stay open. An admin merges or closes them on GitHub; nothing merges them by itself, and the rules of the base branch on GitHub still apply.
+- **What still happens.** The tasks of the request were pushed when they were released and have their pull requests as usual. Those pull requests stay open. An admin merges or closes them on GitHub; nothing merges them automatically, and the rules of the base branch on GitHub still apply.
 - **It is visible.** The marker stays in the description of the request. To list the requests that used it, read table `E07T` for descriptions containing `#NOREVIEW` (SE16).
 - **It only affects the release of the request.** Tasks are not affected.
 - **Nobody checks who writes it.** Anyone who may change the request text can use it. If that is a problem for you, review the list of requests with the marker regularly, and write the reason into the documentation of the request.
@@ -234,7 +234,7 @@ The messages are the ones the tools write. Where a release is refused you see th
 | "`<request>`: `<n>` file(s) not reviewed yet. They are pushed to the review branch now" | The objects of the request differ from the review branch, for example a change after the last task release | Wait for the push job `GIT_REVIEW_<request>` (SM37), get the new commit approved, release again. A new commit cancels an earlier approval |
 | "Another push to GitHub is running. Release the request again in a minute." | The push lock is held by another push; the check waits 60 s for it | Release again after a minute |
 | "`<request>`: not everything can go to Git: ..." | The request holds an entry that neither abapGit nor `ZCL_TR_CONTENT` can write, and STVARV `ZTR_REQUIRE_COMPLETE` is `X` | Remove the entry from the request, or untick "Refuse requests with entries that cannot be written to Git" in `ZTR_SETUP` |
-| "The review of `<request>` was NOT checked: ..." (information) | The check itself failed, for example GitHub is not reachable | The release goes on and no job is started (the check fails open): that change is not reviewed and does not reach the base branch by itself. Run `ZTR_PUSH_TRANSPORT` for the request by hand when GitHub is back |
+| "The review of `<request>` was NOT checked: ..." (information) | The check itself failed, for example GitHub is not reachable | The release goes on and no job is started (the check fails open): that change is not reviewed and does not reach the base branch on its own. Run `ZTR_PUSH_TRANSPORT` for the request by hand when GitHub is back |
 | A request has to go out without review | Emergency | Put `#NOREVIEW` in the short text of the request. No login check, no review check and no merge job run for that request. The pull request stays open; an admin merges it |
 | "STVARV parameter ZTR_CLIENT_ID is missing" | `ZTR_SETUP` was not run with "Write the settings" | Run it and enter the Client ID |
 | "The code expired before it was entered on GitHub" | The code of the login was not entered in time | Run `ZTR_GITHUB_LOGIN` again |

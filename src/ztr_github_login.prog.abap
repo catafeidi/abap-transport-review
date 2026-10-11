@@ -9,7 +9,7 @@
 *& it, and waits until the developer entered it on github.com/login/device
 *& and allowed the GitHub App. The token that GitHub gives back is kept
 *& encrypted on this system, for this user only (class ZCL_TR_AUTH).
-*& The same login popup appears by itself when somebody who is not
+*& The same login popup appears automatically when somebody who is not
 *& logged in releases a task or request in SAP GUI.
 *&
 *& Log out removes the token from SAP. The access on the GitHub side is
