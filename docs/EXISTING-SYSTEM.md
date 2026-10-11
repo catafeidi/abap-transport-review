@@ -5,7 +5,7 @@ A development system that has been running for years has released transports and
 ## What the tools do not do
 
 - **Released transports are not replayed.** The push reads the *current* state of the objects of a transport, not the state at the time it was released. Pushing an old request today would write today's objects under the old request number, which is wrong. So there is no commit or pull request per historic transport. The history in Git starts at the first release after the installation.
-- **There is no merge of old content by itself.** What is on GitHub before the first release is what you put there in step 2 below.
+- **Old content is not merged automatically.** What is on GitHub before the first release is what you put there in step 2 below.
 
 ## What the tools do with each case
 

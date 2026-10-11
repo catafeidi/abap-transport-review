@@ -6,7 +6,7 @@
 
 ## Use it
 
-Copy the folder `skills/clean-abap` to `.claude/skills/` of the project (or `~/.claude/skills/` for all projects). Claude Code loads it by itself when ABAP is written or reviewed.
+Copy the folder `skills/clean-abap` to `.claude/skills/` of the project (or `~/.claude/skills/` for all projects). Claude Code loads it automatically when ABAP is written or reviewed.
 
 ## Attribution
 

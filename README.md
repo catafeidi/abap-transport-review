@@ -1,19 +1,38 @@
 # abap-transport-review
 
-Code review for SAP transports, with GitHub pull requests. Releasing a task pushes its objects to a review branch and opens a pull request. Releasing the request is refused until that pull request is approved, and the release merges it. The rule has three ways out, on purpose: the marker `#NOREVIEW` in the request text, the switch `ZTR_DISABLED`, and a check that fails by itself (it never stops a release); see [docs/WORKFLOW.md](docs/WORKFLOW.md).
+**Reviewed, traceable and controlled transports for SAP ABAP development.**
 
-Everything runs inside the SAP development system, in ABAP, on top of [abapGit](https://github.com/abapGit/abapGit). Nothing is transported.
+This project connects the SAP transport system with GitHub pull requests. Releasing a task commits its objects to a review branch and opens a pull request. A request cannot be released until a colleague has approved that pull request, and the release of the request merges it. Exceptions are explicit and visible: the marker `#NOREVIEW` in the request text, the switch `ZTR_DISABLED`, and a failure of the check itself, which never stops a release. See [docs/WORKFLOW.md](docs/WORKFLOW.md).
+
+Everything runs inside the SAP development system, in ABAP, on top of [abapGit](https://github.com/abapGit/abapGit). The tools are local objects of the development system and are not transported.
 
 ## Why use it
 
-- **A second person has to approve before a request can be released.** Every task becomes a pull request under the developer's own GitHub account, and the request cannot be released until its pull request is approved by somebody else: GitHub does not count the approval of the author. You decide when and how a transport can leave the development system, and a change that nobody else has looked at does not get out. That raises the quality of what is transported.
-- **AI-assisted review on the pull request.** You can turn on GitHub Copilot code review for the repository (it needs a Copilot licence). It reviews the diff of every pull request automatically and comments within moments, guided by the instructions you put in `.github/copilot-instructions.md`. Together with abaplint on GitHub, the routine checks run on GitHub before a colleague opens the pull request, so the colleague starts from a diff that is already checked, and nobody has to spend an AI session on their own machine for it. Copilot's review is a comment, not the required approval; the approval still comes from a person. How to turn it on: [docs/GITHUB-REPOSITORY-SETUP.md](docs/GITHUB-REPOSITORY-SETUP.md#ai-assisted-review-with-github-copilot-optional).
-- **Colleagues see the change.** The review happens on a diff with inline comments, one commit per released task, and the history and blame of Git, not in a list of objects of a transport.
-- **It works on older systems.** SAP NetWeaver 7.40 SP08 and newer, on-premise or private cloud. The classic transport request still moves the change between systems; nothing in your landscape changes.
-- **Your tools can read the code.** The code in Git is in the abapGit layout: pull requests show real diffs, Git gives history and blame, abaplint and other checks run on GitHub, and the same code can be pulled into another ABAP system.
-- **Issues, pull requests and merges are linked.** Start the request text with the issue key and Jira, Linear, Azure Boards or GitHub Issues show the pull request and its merge on the issue ([below](#linking-issues-pull-requests-and-merges)).
+The purpose is clean code and controlled releases. A change leaves the development system only after another person has reviewed it, and everything about the change is recorded: when it was released, what changed, who made it, who approved it, and why.
+
+In many landscapes these questions are hard to answer after the fact. With this project the answers are in Git and on GitHub:
+
+| Question | Where the answer is |
+|---|---|
+| What changed? | The diff of the pull request: every object, line by line, with one commit for each released task |
+| Who made the change? | The commits, made under the name and e-mail of the owner of the task as the user master of SAP holds them, and the pull request, opened under the GitHub account of the developer who released the task |
+| Who reviewed and approved it? | The reviews on the pull request: comments, requested changes and the approval, each with the person and the time |
+| When was it released? | The description of the pull request, which carries the release stamp that SAP writes into the documentation of a task when it is released, and the merge commit on the base branch, which carries the time of the merge |
+| Why was it made? | The issue key at the start of the request text, which is in the commit message, in the pull request title and in the issue tracker |
+| Which transport carried it? | The request number at the start of every commit message and of the pull request title, and the branch `review/<request>` |
+| Were the remarks of the reviewer dealt with? | The conversations on the pull request, which have to be resolved before it can be merged |
+
+The second approval and the rule on conversations come from the branch rules of the repository ([docs/GITHUB-REPOSITORY-SETUP.md](docs/GITHUB-REPOSITORY-SETUP.md)).
+
+What you gain:
+
+- **Quality through a second approval.** Every task becomes a pull request under the developer's own GitHub account, and the request cannot be released until its pull request is approved by somebody else: GitHub does not count the approval of the author. You decide when and how a transport can leave the development system, and a change that nobody else has looked at does not get out.
+- **Clean code that is checked where everybody can see it.** abaplint can run on GitHub on every pull request (the syntax of your target release and the Clean ABAP rules; the workflows are in `github-templates/`), and you can turn on GitHub Copilot code review for the repository (it needs a Copilot licence). Copilot reviews the diff automatically, guided by the instructions in `.github/copilot-instructions.md`. A colleague therefore starts from a diff that has already been checked, and nobody has to spend an AI session on their own machine for it. The review by Copilot is a comment, not the required approval; the approval comes from a person. How to turn it on: [docs/GITHUB-REPOSITORY-SETUP.md](docs/GITHUB-REPOSITORY-SETUP.md#ai-assisted-review-with-github-copilot-optional).
+- **Review on a diff.** The review uses a diff with inline comments, the history and the blame of Git, not a list of the objects of a transport.
+- **Linked to the issue tracker.** Start the request text with the issue key and Jira, Linear, Azure Boards or GitHub Issues show the pull request and its merge on the issue ([below](#linking-issues-pull-requests-and-merges)).
+- **Works on older systems.** SAP NetWeaver 7.40 SP08 and newer, on-premise or private cloud. The classic transport request still moves the change between systems; nothing in your landscape changes.
 - **Developers keep their way of working.** They release in SAP GUI or in Eclipse ADT as before and log in to GitHub once. The push, the pull request and the merge run as background jobs.
-- **There is a way out.** The tools can be switched off for a system (`ZTR_DISABLED`), one request can be released without review (`#NOREVIEW`), and a check that fails by itself never stops a release.
+- **Exceptions are controlled and auditable.** The tools can be switched off for a system (`ZTR_DISABLED`). One request can be released without review with `#NOREVIEW`; the marker stays in the description of the request, where it can be listed. A failure of the check itself never stops a release.
 
 It is not meant for the cloud editions of S/4HANA or the BTP ABAP environment, and it does not replace the delivery of transports to other systems; see [gCTS and this project](#gcts-and-this-project) and the [roadmap](#roadmap).
 
@@ -39,7 +58,7 @@ Full checklist with what to do when a step fails: [docs/INSTALL.md](docs/INSTALL
 | 2 | Create a GitHub App (device flow on, expiring user tokens off) and install it on your repositories. Note its **Client ID** | GitHub, Settings, Developer settings, GitHub Apps. See [docs/GITHUB-LOGIN.md](docs/GITHUB-LOGIN.md) | The App page shows a Client ID and "Enable Device Flow" is ticked |
 | 3 | Pull this repository into the local package `$ZTR_REVIEW` | `ZABAPGIT`, New Online, branch `master`, then Pull and activate | Report `ZTR_SETUP` exists and the BAdI implementation `ZTR_RELEASE_CHECK` is active (SE19) |
 | 4 | Enter the Client ID and the package pattern, tick "Write the settings", execute | Report `ZTR_SETUP` (SA38) | The output has no red line. Yellow lines are information |
-| 5 | Every developer logs in to GitHub once. In SAP GUI this also happens by itself at the first release (a popup). In Eclipse ADT there is no popup: the release is refused until the developer has logged in | Report `ZTR_GITHUB_LOGIN` (SA38), Log in; in ADT the class `ZCL_TR_CONSOLE_LOGIN`, run twice with F9 | "Logged in to GitHub as `<login>`" |
+| 5 | Every developer logs in to GitHub once. In SAP GUI this also happens automatically at the first release (a popup). In Eclipse ADT there is no popup: the release is refused until the developer has logged in | Report `ZTR_GITHUB_LOGIN` (SA38), Log in; in ADT the class `ZCL_TR_CONSOLE_LOGIN`, run twice with F9 | "Logged in to GitHub as `<login>`" |
 
 <!-- screenshot, see docs/images/README.md
 ![ZTR_SETUP output with green lights](docs/images/01-setup-report-green-lights.png)
@@ -95,7 +114,7 @@ Two things to know:
 - The **branch name** is `review/<request>`, with the request number and not the issue key. A tracker that links only by branch name will not find the issue; the title and the commit message have the key.
 - **Nothing checks the key.** A request without a key is reviewed like every other. [docs/JIRA.md](docs/JIRA.md) shows exactly what is written where, and how a check for the key could be added.
 
-## The emergency exit: `#NOREVIEW`
+## Releasing without review: `#NOREVIEW`
 
 Write `#NOREVIEW` anywhere in the short text of a **request**, upper or lower case, for example `#NOREVIEW ABC-123 Fix posting run`. The release of that request then skips the check: no login check, no review check and no merge job. Use it for an emergency, not to save time.
 
@@ -208,7 +227,7 @@ The messages are the ones the tools write. Where a release is refused you see th
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| "`<user>` is not logged in to GitHub on `<system>`" | The user has no token on this system | Run `ZTR_GITHUB_LOGIN` once (in the SAP GUI dialog the login popup comes up by itself), or in ADT run `ZCL_TR_CONSOLE_LOGIN` twice, then release again. In ADT and in a background release only the refusal is shown |
+| "`<user>` is not logged in to GitHub on `<system>`" | The user has no token on this system | Run `ZTR_GITHUB_LOGIN` once (in the SAP GUI dialog the login popup appears automatically), or in ADT run `ZCL_TR_CONSOLE_LOGIN` twice, then release again. In ADT and in a background release only the refusal is shown |
 | "GitHub account `<login>` of `<user>` has no access to: `<repositories>`" | The account is not a member of the repository, or the GitHub App is not installed on it | Give the user write access and install the app on the repository, then release again |
 | "GitHub does not accept the token of `<user>` any more (revoked or expired). Log in again: report ZTR_GITHUB_LOGIN" | The token was revoked or expired on GitHub | Log in again with `ZTR_GITHUB_LOGIN` |
 | "`<request>` is not released: pull request `<n>` is not approved yet" / "no pull request is open for `<branch>`" | The request is released before the review is finished | Get the pull request approved on GitHub (all conversations resolved), then release again |
