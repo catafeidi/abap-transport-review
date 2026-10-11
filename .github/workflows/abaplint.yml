@@ -1,0 +1,34 @@
+# ABAP 7.40 syntax check on every pull request into master.
+#
+# abaplint parses the ABAP sources with the syntax of SAP_BASIS 7.40 at the support package
+# in abaplint.json ("syntax.version"): statements and expressions that only exist on a later
+# release or support package are reported. A newer development system accepts them, so ATC
+# on that system cannot find these; this check can.
+#
+# Only the files changed by the pull request count: existing findings elsewhere are listed in
+# the job summary for information, but do not turn the check red.
+# GitHub has no SAP dictionary, so only the syntax rule (parser_error) is used; ATC on the SAP
+# system stays the full check.
+name: abaplint 7.40
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-740:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: abaplint
+        run: |
+          npx --yes @abaplint/cli@2.120.67 abaplint.json --format json > abaplint-result.json || true
+          node .github/abaplint-changed-files.js "${{ github.event.pull_request.base.sha }}"

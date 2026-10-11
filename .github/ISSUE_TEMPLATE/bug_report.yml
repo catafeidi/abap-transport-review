@@ -1,0 +1,52 @@
+name: Bug report
+description: Something does not work as the documentation says
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not put names of companies, hosts, users, tokens or customer data into this form.
+  - type: input
+    id: release
+    attributes:
+      label: SAP release
+      description: SAP_BASIS release and support package, for example 7.40 SP25 or 7.58
+    validations:
+      required: true
+  - type: input
+    id: abapgit
+    attributes:
+      label: abapGit version
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did you release
+      options:
+        - SAP GUI, in the dialog
+        - Eclipse ADT
+        - In the background
+        - I ran a report or a console class
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: textarea
+    id: log
+    attributes:
+      label: Message or job log (SM37)
+      render: text
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: Confirm
+      options:
+        - label: I removed names of companies, hosts, users, tokens and customer data from this report
+          required: true

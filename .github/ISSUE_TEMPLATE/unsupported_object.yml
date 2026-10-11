@@ -1,0 +1,51 @@
+name: Object or entry that is not written to Git
+description: The pull request lists an entry under "Not in Git", or the release is refused because of it
+labels: ["unsupported-object"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Do not put names of companies, hosts, users, tokens or customer data into this form.
+  - type: input
+    id: entry
+    attributes:
+      label: The entry of the transport
+      description: Program ID, object type and name pattern as SE09 or the "Not in Git" list shows it, for example `R3TR XXXX` or `LIMU YYYY`. A generic name is enough.
+    validations:
+      required: true
+  - type: dropdown
+    id: abapgit_supports
+    attributes:
+      label: Does abapGit support the object type on your system?
+      description: See the Debug Info of abapGit.
+      options:
+        - "Yes, abapGit supports it, but the tools did not write it"
+        - "No, abapGit does not support it"
+        - "I do not know"
+    validations:
+      required: true
+  - type: input
+    id: release
+    attributes:
+      label: SAP release
+      description: SAP_BASIS release and support package, for example 7.40 SP25 or 7.58
+    validations:
+      required: true
+  - type: input
+    id: abapgit
+    attributes:
+      label: abapGit version
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you expect
+      description: What should be in Git for this entry, and how would you bring it into another system?
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: Confirm
+      options:
+        - label: I removed names of companies, hosts, users and customer data
+          required: true

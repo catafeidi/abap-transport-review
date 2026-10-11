@@ -137,7 +137,9 @@ abapGit turns repository objects (classes, interfaces, tables, programs and so o
 | ALV layouts (rows of `LTDX`) | `content/tables/ltdx.json` |
 | SAP Note entries (`NOTE`, `CINS`, `CORR`) | `content/notes/<entry>.json`: the note number and the version, not SAP's code |
 | Namespace and request administration (`NSPC`, `RELE`, `MERG`, `COMM`) | ignored, they have no content of their own |
-| Anything else | **not supported:** not written. The pull request lists it under "Not in Git" and so does the job log, so the reviewer checks it on the system |
+| Anything else | **not supported:** not written. The pull request lists it under "Not in Git" and so does the job log, so the reviewer checks it on the system. This is not an error by default. With the setting `ZTR_REQUIRE_COMPLETE` the release of such a request is refused with an error |
+
+If you find an object that should be supported and is not, please [tell us](https://github.com/catafeidi/abap-transport-review/issues/new/choose): give the object type, your abapGit version and your SAP release.
 
 Also: a transport of copies is never pushed; an object that is deleted in the transport removes its files; some entries are outside Git by nature, for example client-specific customizing that travels in customizing requests and is not a repository object; check those on the system.
 
@@ -293,6 +295,14 @@ Ideas, not promises. There is no date.
 - **A first import that publishes the last released version** of objects that are in an open task, so that the first pull request shows a diff.
 - **More unit tests** for the push report and the release check, and the Clean ABAP rules on the whole code base.
 - **Pinned versions** for the abaplint server in the Docker file.
+
+## Feedback and contributions
+
+Everybody is welcome to use this project, to report what does not work and to improve it.
+
+- **Report** a problem, an object that is not supported, or an idea: [new issue](https://github.com/catafeidi/abap-transport-review/issues/new/choose). Reports from other SAP releases than the ones in [Supported systems](#supported-systems) are especially useful.
+- **Change** something: fork the repository, make the change in a branch and open a pull request. [CONTRIBUTING.md](CONTRIBUTING.md) says how to check a change and what a pull request needs. A maintainer reviews every pull request, and the check `abaplint 7.40` runs on it.
+- **Security problems:** report them privately, see [SECURITY.md](SECURITY.md).
 
 ## Licence
 

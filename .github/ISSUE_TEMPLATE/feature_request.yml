@@ -1,0 +1,20 @@
+name: Idea or improvement
+description: Suggest a change
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Which problem does it solve
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you change
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: I would like to make this change myself in a pull request
