@@ -5,6 +5,7 @@ Copy what you need into the repository that holds your ABAP package.
 | File | Goes to | For |
 |---|---|---|
 | `CODEOWNERS` | `.github/CODEOWNERS` | reviewers requested on every pull request |
+| `copilot-instructions.md` | `.github/copilot-instructions.md` | what GitHub Copilot code review should look for, if you turn it on |
 | `abaplint/` | `abaplint.json`, `.github/workflows/abaplint.yml`, `.github/abaplint-changed-files.js` | a repository with existing code: 7.40 SP08 syntax check, only the files changed by the pull request fail |
 | `abaplint-new-repository/abaplint.json`, `abaplint.yml`, `abaplint-annotate.js` | `abaplint.json`, `.github/workflows/abaplint.yml`, `.github/abaplint-annotate.js` | a repository that starts empty: 7.40 SP08 syntax, every finding fails |
 | `abaplint-new-repository/abaplint-cloud.json`, `abaplint-core.yml` | `abaplint-cloud.json`, `.github/workflows/abaplint.yml` | additionally for code that must also run in ABAP Cloud: statements, object types and SAP objects outside ABAP Cloud and 7.40 |

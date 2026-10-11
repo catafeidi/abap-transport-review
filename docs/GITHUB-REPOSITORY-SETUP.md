@@ -137,3 +137,13 @@ gh repo view <owner>/<repository> --json defaultBranchRef,squashMergeAllowed,mer
 gh api repos/<owner>/<repository>/rulesets --jq '.[] | "\(.name) (\(.enforcement))"'
 gh pr list --repo <owner>/<repository>
 ```
+
+## AI-assisted review with GitHub Copilot (optional)
+
+GitHub Copilot code review can review every pull request automatically and leave comments on the diff. It needs a Copilot licence for the user or organization. It is a first, fast reviewer; its review is a comment and does not replace the approval of a person that the ruleset requires.
+
+1. Turn it on for the repository: in the rulesets (or in the Copilot settings of the repository) enable the automatic Copilot code review of pull requests. The labels change from time to time; follow GitHub's page [Using GitHub Copilot code review](https://docs.github.com/en/copilot/how-tos/copilot-on-github/use-copilot-agents/copilot-code-review).
+2. Tell it what to look for: copy [`github-templates/copilot-instructions.md`](../github-templates/copilot-instructions.md) to `.github/copilot-instructions.md` and adapt it. GitHub describes the instruction files in [Using custom instructions to unlock the power of Copilot code review](https://docs.github.com/en/copilot/tutorials/customize-code-review). Check there from which branch of the pull request the file is read.
+3. Judge the comments for ABAP yourself for a few weeks before you rely on them: how useful they are for ABAP depends on your instructions.
+
+The checks that need no licence, abaplint on GitHub, are in [`github-templates/`](../github-templates/README.md).

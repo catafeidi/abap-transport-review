@@ -6,7 +6,9 @@ Everything runs inside the SAP development system, in ABAP, on top of [abapGit](
 
 ## Why use it
 
-- **A review before a change reaches the base branch.** Every task becomes a pull request under the developer's own GitHub account, and the request cannot be released until its pull request is approved. GitHub does not let the author approve their own pull request.
+- **A second person has to approve before a request can be released.** Every task becomes a pull request under the developer's own GitHub account, and the request cannot be released until its pull request is approved by somebody else: GitHub does not count the approval of the author. You decide when and how a transport can leave the development system, and a change that nobody else has looked at does not get out. That raises the quality of what is transported.
+- **AI-assisted review on the pull request.** You can turn on GitHub Copilot code review for the repository (it needs a Copilot licence). It reviews the diff of every pull request automatically and comments within moments, guided by the instructions you put in `.github/copilot-instructions.md`. Together with abaplint on GitHub, the routine checks run on GitHub before a colleague opens the pull request, so the colleague starts from a diff that is already checked, and nobody has to spend an AI session on their own machine for it. Copilot's review is a comment, not the required approval; the approval still comes from a person. How to turn it on: [docs/GITHUB-REPOSITORY-SETUP.md](docs/GITHUB-REPOSITORY-SETUP.md#ai-assisted-review-with-github-copilot-optional).
+- **Colleagues see the change.** The review happens on a diff with inline comments, one commit per released task, and the history and blame of Git, not in a list of objects of a transport.
 - **It works on older systems.** SAP NetWeaver 7.40 SP08 and newer, on-premise or private cloud. The classic transport request still moves the change between systems; nothing in your landscape changes.
 - **Your tools can read the code.** The code in Git is in the abapGit layout: pull requests show real diffs, Git gives history and blame, abaplint and other checks run on GitHub, and the same code can be pulled into another ABAP system.
 - **Issues, pull requests and merges are linked.** Start the request text with the issue key and Jira, Linear, Azure Boards or GitHub Issues show the pull request and its merge on the issue ([below](#linking-issues-pull-requests-and-merges)).
@@ -14,6 +16,18 @@ Everything runs inside the SAP development system, in ABAP, on top of [abapGit](
 - **There is a way out.** The tools can be switched off for a system (`ZTR_DISABLED`), one request can be released without review (`#NOREVIEW`), and a check that fails by itself never stops a release.
 
 It is not meant for the cloud editions of S/4HANA or the BTP ABAP environment, and it does not replace the delivery of transports to other systems; see [gCTS and this project](#gcts-and-this-project) and the [roadmap](#roadmap).
+
+## How it works
+
+1. **Work as usual.** A developer changes objects in a request with tasks, in SAP GUI or in Eclipse ADT. The short text of the request starts with the issue key ([below](#linking-issues-pull-requests-and-merges)).
+2. **Release a task.** The release check makes sure the developer is logged in to GitHub (a popup in SAP GUI the first time). A background job then commits the objects of that task to the branch `review/<request>`, opens a pull request from it, if there is none yet, and sends the link to the developer's SAP inbox.
+3. **Review on GitHub.** The checks of the repository run on the pull request (abaplint, and Copilot if you turned it on). A colleague reads the diff, comments and approves. The author cannot approve their own pull request. By default a colleague who pushed a later commit can still approve; the ruleset option "require approval of the most recent reviewable push" closes that.
+4. **Rework, if the review asks for changes.** The developer does not touch the pull request. They create a **new task in the same request**, make the changes and release that task. The job adds a **new commit to the same branch**, so the same pull request shows the new change. A new commit dismisses the approvals given before (with the ruleset of this project), so the reviewer looks again. This repeats until the pull request is approved and all conversations are resolved.
+5. **Release the request.** The release check compares the objects of the request with the approved pull request. If it is approved and nothing changed since, the release goes on. If it is not approved, or an object changed after the last push, the release is refused with the reason, and a changed object is pushed to the same pull request so that it can be reviewed again.
+6. **Merge.** When the request is released, a job squashes and merges the pull request into the base branch. The commit title is the request text followed by the number of the pull request, so the issue tracker shows the merge.
+7. **Transport as before.** The transport request moves to the other systems in the way your landscape does it today. Git holds the reviewed copy; it does not deploy.
+
+Who sees what: the **developer** works in SAP and reads refusals as a popup (SAP GUI) or an error message (ADT); the **reviewer** works only on GitHub; the **administrator** sets the branch rules once and can merge by hand in an emergency. Details: [docs/WORKFLOW.md](docs/WORKFLOW.md).
 
 ## Quick start
 
@@ -43,8 +57,11 @@ flowchart TD
     D --> E[Job waits until the task is released]
     E --> F[Commit on review/request, pull request opened as the developer]
     F --> G[Express document with the link to the developer's SAP inbox]
-    G --> H[Colleague reviews and approves on GitHub]
-    H --> I[Developer releases the request]
+    G --> H{Review on GitHub}
+    H -- changes requested --> R[Developer creates a new task in the same request, changes the objects and releases it]
+    R --> S[Job adds a commit to the same pull request, earlier approvals are dismissed]
+    S --> H
+    H -- approved --> I[Developer releases the request]
     I --> J{Pull request approved and objects equal the branch?}
     J -- no --> J1[Release refused, reason shown]
     J -- yes --> K[Release goes on, BAdI starts job GIT_MERGE_request]
