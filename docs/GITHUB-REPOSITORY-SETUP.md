@@ -76,7 +76,7 @@ A pull request needs an approval from somebody other than the person who opened 
 
 ### Optional: only the release merges
 
-Script `github-templates/github-restrict-merge.sh` adds a second ruleset, "Default branch merged only by SAP release or an admin" (rule: restrict updates on the default branch). Its bypass list is the repository role Admin and your GitHub App. An approver, or any other person with write access, can then not press Merge on GitHub: the merge happens when the author releases the request, or an admin merges by hand.
+Script `github-templates/github-restrict-merge.sh` adds a second ruleset, "Default branch merged only by SAP release or an admin" (rule: restrict updates on the default branch). Its bypass list is the repository role Admin and your GitHub App. An approver, or any other person with write access, can then not press Merge on GitHub: the merge happens when the author releases the request, or an admin merges by hand. This is what keeps the base branch free of unreleased work: without the rule, an approved pull request could be merged while the request is still open, and a new task added to the request afterwards would be released after the merge.
 
 ```bash
 bash github-restrict-merge.sh <owner> <github-app-id> <repository> [<repository> ...]

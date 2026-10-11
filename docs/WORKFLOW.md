@@ -113,7 +113,7 @@ If opening the pull request fails, the job log says so with the HTTP status, the
 1. Log in to GitHub once with `ZTR_GITHUB_LOGIN`. Without it nothing with objects under Git can be released.
 2. Release the task when the work is ready for review. Do not release the request yet. The pull request opens automatically, in your name.
 3. Reviewers comment on GitHub. Fixes are made on the SAP system, in a **new task of the same request**: release it, and the job adds a new commit to the same branch, so the same pull request shows the change. The approvals given before are dismissed, so the reviewer approves again. Never commit suggestions or edit on GitHub: the next push from the system overwrites it.
-4. After approval: release the request. The merge happens automatically.
+4. After approval: release the request. The merge happens automatically, from SAP. Do not merge the pull request on GitHub: the base branch must contain only released work. The repository rule of [GITHUB-REPOSITORY-SETUP.md](GITHUB-REPOSITORY-SETUP.md) stops it.
 
 ## The report by hand
 
