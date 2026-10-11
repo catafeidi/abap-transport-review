@@ -26,7 +26,7 @@ In every table file, fields whose name, data element or domain contains CRED, PA
 
 Every pull request lists the entries of its request that nothing could write, so the reviewer checks them on the system. With the STVARV parameter `ZTR_REQUIRE_COMPLETE` = `X` (tick "Refuse requests with entries that cannot be written to Git" in `ZTR_SETUP`) such a request is refused at release with "not everything can go to Git". Switch it on once the baseline shows no gaps.
 
-What abapGit itself cannot write depends on its version and on the release of your system. When abapGit is updated, run the repository view once: objects that a newer version can serialize show up as new files and the list gets shorter.
+What abapGit itself cannot write depends on its version and on the release of your system. The list of the object types that your installation supports is in abapGit's [Debug Info](https://docs.abapgit.org/user-guide/tools/debug-info.html). When abapGit is updated, run the repository view once: objects that a newer version can serialize show up as new files and the list gets shorter.
 
 Some entries are outside Git by nature: for example client-specific customizing that travels in customizing requests and is not a repository object. In a review, look at the object list of the request on the system as well as at the pull request.
 

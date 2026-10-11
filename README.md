@@ -127,12 +127,19 @@ Write `#NOREVIEW` anywhere in the short text of a **request**, upper or lower ca
 
 abapGit turns repository objects (classes, interfaces, tables, programs and so on) into files under `src/`. A transport carries more than that: table rows, report variants, authorization profiles, old OTR texts, ALV layouts and SAP Note entries. This project writes them as JSON files under `content/`, in the same commit and the same pull request as the objects, so a reviewer sees them too.
 
-| Entry of the transport | File |
+| Entry of the transport | What happens |
 |---|---|
-| Table rows (delivered content and customizing) | `content/tables/<table>.json`, one object for each row, sorted by key, without the client |
-| Report variants | `content/variants/<report>.<variant>.json`: header, texts and values |
-| SAP Note entries | `content/notes/<entry>.json`: the note number and the version, not SAP's code |
-| Anything else | not written; the pull request lists it under "Not in Git" |
+| An object that your abapGit version supports (classes, interfaces, tables, programs and so on; a part of an object, such as a method, counts as the object) | abapGit writes the files under `src/`. Which types are supported depends on the version of abapGit and on the release of your system; the list for your system is in abapGit's [Debug Info](https://docs.abapgit.org/user-guide/tools/debug-info.html) |
+| Table rows (`TABU`, `TDAT`, `VDAT`, `CDAT`) | `content/tables/<table>.json`, one object for each row, sorted by key, without the client |
+| A logical transport object that SAP defines with tables, for example authorization profiles (`SUSP`) | the rows of its tables, in the same table files |
+| Old OTR texts (`SOTR`) | the rows of `SOTR_HEAD` and `SOTR_TEXT` of the package |
+| Report variants (`VARX`, `VARI`) | `content/variants/<report>.<variant>.json`: header, texts and values |
+| ALV layouts (rows of `LTDX`) | `content/tables/ltdx.json` |
+| SAP Note entries (`NOTE`, `CINS`, `CORR`) | `content/notes/<entry>.json`: the note number and the version, not SAP's code |
+| Namespace and request administration (`NSPC`, `RELE`, `MERG`, `COMM`) | ignored, they have no content of their own |
+| Anything else | **not supported:** not written. The pull request lists it under "Not in Git" and so does the job log, so the reviewer checks it on the system |
+
+Also: a transport of copies is never pushed; an object that is deleted in the transport removes its files; some entries are outside Git by nature, for example client-specific customizing that travels in customizing requests and is not a repository object; check those on the system.
 
 **Bringing it into another system.** abapGit pulls only `src/`. The report `ZTR_APPLY_CONTENT` does the rest:
 
