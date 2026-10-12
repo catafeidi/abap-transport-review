@@ -21,10 +21,8 @@ Everything on GitHub happens under the developer's own account. Each developer l
 | Request about to be released | The BAdI asks `ZTR_PUSH_TRANSPORT` in check mode whether the current state of the objects of the request is reviewed. If not, the release is refused. Objects that are on no branch are pushed to `review/<request>` so that they get reviewed. |
 | Request released | The BAdI starts the job `GIT_MERGE_<request>` as the developer. It waits until the request really is released and then squashes and merges the approved pull request into the base branch. GitHub deletes the review branch if the repository is set up for it. |
 
-<!-- screenshot, see docs/images/README.md
-![Task release in SAP GUI](images/03-task-release-progress-or-popup.png)
-*What to look at: the release of a task finishes at once; the work runs in the job.*
--->
+![Task release in Eclipse (ADT)](images/03-task-release-progress-or-popup.png)
+*What to look at: the release of a task finishes at once; the work runs in the job. In Eclipse (ADT) nothing more is shown: the pull request is on GitHub a moment later.*
 
 The base branch is parameter `P_BASE` of the report, default `master`. With `P_BASE` empty, the default branch of the GitHub repository is used.
 
@@ -39,10 +37,8 @@ Only tasks and requests with at least one object whose name matches the pattern 
 
 How the issue key of a ticket system reaches these texts: [JIRA.md](JIRA.md).
 
-<!-- screenshot, see docs/images/README.md
 ![Pull request on GitHub](images/06-pull-request-on-github.png)
 *What to look at: title, the task list and the documentation section in the description.*
--->
 
 ## What stops a release without review
 
@@ -79,10 +75,13 @@ The merge happens after the release, not before, so that a release that fails in
 | SAP GUI, release in the background (SE03 setting) | the job `RELEASE OF <request>` is cancelled; the reason is in its log in SM37 |
 | Eclipse (ADT) | the error message of the release. There is no popup and no login dialog: a developer who is not logged in is refused with the name of the login report and runs it in SAP GUI, or runs the console class `ZCL_TR_CONSOLE_LOGIN` from ADT (optional sub-package) |
 
-<!-- screenshot, see docs/images/README.md
 ![Request release refused](images/11-request-release-refused-pending-review.png)
 *What to look at: the reason names the pull request and says what to do next.*
--->
+
+In Eclipse (ADT) the same reason is shown in the Problems view:
+
+![Request release refused in Eclipse](images/15-eclipse-release-refused-message.png)
+*What to look at: the reason names the pull request and says to get it approved, then release again.*
 
 ### After the push: the notice
 

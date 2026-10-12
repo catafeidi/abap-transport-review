@@ -25,10 +25,8 @@ The same for the text of a request created by report `ZTR_APPLY_CONTENT` (its fi
 
 So the key appears in the commit messages, in the pull request title, in the pull request description and in the squash commit. If you also write the key into the documentation of the request (SE09), it is in the description as well.
 
-<!-- screenshot, see docs/images/README.md
 ![Pull request title with the issue key](images/07-pr-title-with-jira-key.png)
 *What to look at: the title starts with the request number and then the issue key.*
--->
 
 ## What Jira and GitHub do, not these tools
 
@@ -36,10 +34,8 @@ The Development panel of a Jira issue (branches, pull requests, commits) comes f
 
 This is configuration on the Jira and GitHub side. The tools do not install, call or check it.
 
-<!-- screenshot, see docs/images/README.md
 ![Development panel of a Jira issue](images/08-jira-development-panel.png)
 *What to look at: the pull request and the commits listed in the Development panel of the issue.*
--->
 
 ## What is not there
 

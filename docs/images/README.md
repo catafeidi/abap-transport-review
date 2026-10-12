@@ -3,7 +3,9 @@
 > The guides contain each screenshot as a hidden block (an HTML comment that starts with `screenshot, see docs/images/README.md`). When you add a picture to this folder, open the guide named in the table below and remove the `<!--` and `-->` lines around its image, so that it shows.
 
 
-**The guides in `docs/` and the README refer to the files listed here. Until the maintainer adds them to this folder, the image links in the guides show as broken.** Do not add placeholder images: a missing file is better than a wrong one.
+**The guides in `docs/` and the README refer to the files listed here.** The pictures 01, 02, 03, 06, 07, 08, 11, 12, 13, 14 and 15 are in this folder and shown in the guides. 04, 05, 09 and 10 are still missing; their blocks stay hidden in the guides until the file is added. Do not add placeholder images: a missing file is better than a wrong one.
+
+The pictures in this folder were taken on a development system and then edited: every system name, host, user, organization, repository, request, task and ticket name was covered and replaced by a neutral name (`<owner>`, `my-abap-repo`, `DEVK900104`, `ABC-123`, `ZTR_*`), so that no real name is left. They show the real screens, with those names replaced. Edit new pictures the same way.
 
 ## Rules for every screenshot
 
@@ -27,14 +29,18 @@
 | `09-codeowners-review-request.png` | GITHUB-REPOSITORY-SETUP | a pull request with the owners listed as requested reviewers | organization, repository, GitHub logins |
 | `10-ruleset-settings.png` | GITHUB-REPOSITORY-SETUP | the ruleset "Default branch only through reviewed pull requests": one required approval, resolved conversations, squash as the only merge method | organization and repository names |
 | `11-request-release-refused-pending-review.png` | WORKFLOW | the popup "Release refused" after releasing a request before the approval, with the reason "pull request `<n>` is not approved yet" and the link | system ID, user name, request number, repository name in the link |
+| `12-setup-selection-screen.png` | INSTALL step 6 | the selection screen of `ZTR_SETUP`: the block "GitHub workflow", the block "abaplint client" and the box "Write the settings above" | client ID of the GitHub App, package pattern, abaplint host |
+| `13-login-report-selection.png` | GITHUB-LOGIN | the selection screen of `ZTR_GITHUB_LOGIN` with the three actions | SAP user name |
+| `14-eclipse-release-not-logged-in.png` | GITHUB-LOGIN | the Problems view of Eclipse (ADT) after a release by a developer who is not logged in: the user, the system and the report to run | SAP user name, system ID |
+| `15-eclipse-release-refused-message.png` | WORKFLOW | the Problems view of Eclipse (ADT) after the release of a request whose pull request is not approved | request number |
 
 ## Where the links are
 
 ```
 README.md                                 01
-docs/INSTALL.md                           01, 02, 05
-docs/GITHUB-LOGIN.md                      02
-docs/WORKFLOW.md                          03, 04, 05, 06, 11
+docs/INSTALL.md                           01, 02, 05, 12
+docs/GITHUB-LOGIN.md                      02, 13, 14
+docs/WORKFLOW.md                          03, 04, 05, 06, 11, 15
 docs/JIRA.md                              07, 08
 docs/GITHUB-REPOSITORY-SETUP.md           09, 10
 ```

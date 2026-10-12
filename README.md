@@ -61,10 +61,8 @@ Full checklist with what to do when a step fails: [docs/INSTALL.md](docs/INSTALL
 | 4 | Enter the Client ID and the package pattern, tick "Write the settings", execute | Report `ZTR_SETUP` (SA38) | The output has no red line. Yellow lines are information |
 | 5 | Every developer logs in to GitHub once. In SAP GUI this also happens automatically at the first release (a popup). In Eclipse ADT there is no popup: the release is refused until the developer has logged in | Report `ZTR_GITHUB_LOGIN` (SA38), Log in; in ADT the class `ZCL_TR_CONSOLE_LOGIN`, run twice with F9 | "Logged in to GitHub as `<login>`" |
 
-<!-- screenshot, see docs/images/README.md
 ![ZTR_SETUP output with green lights](docs/images/01-setup-report-green-lights.png)
 *What to look at: one line per check, no red line.*
--->
 
 ## The flow
 

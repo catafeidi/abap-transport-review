@@ -56,14 +56,18 @@ If the system has an old BAdI implementation of `CTS_EXPORT_FEEDBACK` for a simi
 3. In the browser, open the address (`https://github.com/login/device`), enter the code, log on to GitHub if asked, and allow the app.
 4. The report ends with "Logged in to GitHub as `<login>`".
 
-<!-- screenshot, see docs/images/README.md
+![Login report](images/13-login-report-selection.png)
+*What to look at: the three actions, "Log in" is the default.*
+
 ![Login popup](images/02-login-popup-device-flow.png)
 *What to look at: the code and the address.*
--->
 
 The report does not open the browser and does not touch the clipboard on purpose: SAP GUI treats both as security-relevant frontend calls, and on some PCs they freeze the session instead of asking Allow or Deny.
 
 In SAP GUI, release in the dialog, a developer who is not logged in gets the same popup when releasing, and the release goes on after the login. In Eclipse (ADT) and in a background release there is no popup: the release is refused with the name of the login report. From ADT the login is done with the class `ZCL_TR_CONSOLE_LOGIN` (optional sub-package `$ZTR_REVIEW_CONSOLE`): run it with F9, it prints the address and the code; enter the code on GitHub and run it again to finish. The console shows output only when a run has ended, which is why it takes two runs.
+
+![Release refused in Eclipse, not logged in](images/14-eclipse-release-not-logged-in.png)
+*What to look at: the Problems view of Eclipse names the user and the report to run.*
 
 The same report shows the status and logs out. Logging out removes the token from SAP. To revoke it on GitHub as well: GitHub, Settings, Applications, Authorized GitHub Apps.
 

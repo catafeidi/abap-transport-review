@@ -105,12 +105,13 @@ Block "Mode":
 
 An empty field removes the parameter, so the default applies again.
 
+![ZTR_SETUP selection screen](images/12-setup-selection-screen.png)
+*What to look at: the blocks "GitHub workflow" and "abaplint client", and the box "Write the settings above".*
+
 - **Expected:** read the output from top to bottom. Green is done, yellow is information, red is something to do. The last line is "Nothing left to do on `<system>`, apart from the manual steps above".
 
-<!-- screenshot, see docs/images/README.md
 ![ZTR_SETUP output](images/01-setup-report-green-lights.png)
 *What to look at: no red line.*
--->
 
 - **If not:** each red line names what is missing and what to do. The lines are, in order: abapGit version, the user exit, the release check and whether it is active, whether an old BAdI implementation of `CTS_EXPORT_FEEDBACK` (`ZTR_EXPORT`) is active (deactivate it: its job runs as `DDIC`, who has no GitHub account), documentation objects with a namespace, GitHub over SSL, the device flow of the App, the login of your user, the linked repositories and the access to them, release settings, abaplint. The list of what the report cannot do is at the end.
 
@@ -120,10 +121,8 @@ An empty field removes the parameter, so the default applies again.
 - **Where:** SA38, `ZTR_GITHUB_LOGIN`, "Log in", execute. In Eclipse ADT without SAP GUI: the class `ZCL_TR_CONSOLE_LOGIN` (optional sub-package, step 4), run twice with F9: the first run prints the address and the code, enter it on GitHub, the second run finishes the login.
 - **Expected:** a popup shows a code and an address. Open the address in a browser (the report does not open it for you), enter the code, allow the app. The report waits and then ends with "Logged in to GitHub as `<login>`".
 
-<!-- screenshot, see docs/images/README.md
 ![Login popup with the device code](images/02-login-popup-device-flow.png)
 *What to look at: the code and the address in the popup.*
--->
 
 - **If not:** "STVARV parameter ZTR_CLIENT_ID is missing" means step 6 was not run with "Write the settings". "The code expired before it was entered on GitHub" means run it again. "You did not allow the app on GitHub" means you chose Cancel on GitHub: run it again. More in [GITHUB-LOGIN.md](GITHUB-LOGIN.md).
 - Without this step a developer cannot release a task or request with objects under Git, and cannot use abapGit against github.com.
