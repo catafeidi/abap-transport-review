@@ -11,6 +11,13 @@
 #       approval. A new commit on the pull request cancels an approval given
 #       before, all review conversations must be resolved, and only squash
 #       merging is allowed.
+#       With REQUIRED_CHECK=<name of a status check of the repository>, the
+#       branch of a pull request must also be up to date with the default
+#       branch before it can be merged. GitHub ties "up to date" to a
+#       required check, so one must be named, for example
+#       REQUIRED_CHECK=build. A pull request that was pushed before another
+#       one was merged then cannot be merged until it was pushed again on
+#       top of the current default branch.
 #
 # <owner> is the GitHub user or organization. Needs: gh logged in with the
 # admin role on the repositories.
@@ -26,6 +33,18 @@ ORG="$1"
 MODE="$2"
 shift 2
 REPOSITORIES=("$@")
+
+# Only for mode review: the rule that keeps pull requests up to date.
+CHECK_RULE=""
+if [ -n "${REQUIRED_CHECK:-}" ]; then
+  CHECK_RULE=', {
+        "type": "required_status_checks",
+        "parameters": {
+          "strict_required_status_checks_policy": true,
+          "required_status_checks": [ { "context": "'"$REQUIRED_CHECK"'" } ]
+        }
+      }'
+fi
 
 case "$MODE" in
   basic)
@@ -55,7 +74,7 @@ case "$MODE" in
           "required_review_thread_resolution": true,
           "allowed_merge_methods": ["squash"]
         }
-      } ]
+      }'"$CHECK_RULE"' ]
     }'
     ;;
   *)

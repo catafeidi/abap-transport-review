@@ -51,6 +51,12 @@ METHOD if_ex_cts_request_check~check_before_release.
 *                       the request are pushed to the review branch, so
 *                       that also a change that never went through a task
 *                       gets reviewed, and the developer is told so.
+*                       Refused first, whatever the review says, when an
+*                       object of the request is also in another request
+*                       that is not released: the Git file of an object is
+*                       the whole object, so the request would carry that
+*                       work, and the release order of the two would
+*                       decide what a later system gets (status C).
 *
 * A refusal is always visible:
 *   release in the dialog     -> popup with the reason, then the error
@@ -103,6 +109,7 @@ METHOD if_ex_cts_request_check~check_before_release.
   CONSTANTS files_differ      TYPE c LENGTH 1 VALUE 'D'.
   CONSTANTS push_is_running   TYPE c LENGTH 1 VALUE 'B'.
   CONSTANTS not_in_git        TYPE c LENGTH 1 VALUE 'U'.
+  CONSTANTS open_elsewhere    TYPE c LENGTH 1 VALUE 'C'.
 
   DATA job_name        TYPE tbtcjob-jobname.
   DATA job_number      TYPE tbtcjob-jobcount.
@@ -283,6 +290,17 @@ METHOD if_ex_cts_request_check~check_before_release.
         " Everything is on the review branch and its pull request is
         " approved. Release, and merge once the release went through.
         is_merge = abap_true.
+
+      WHEN open_elsewhere.
+        " The Git file of an object is the whole object as it is active here,
+        " so this request would carry the work of the other request, which
+        " has not been reviewed or released. Order matters: that request
+        " first, or the object out of this one.
+        part_1 = |{ request } is not released: { detail }.|.
+        part_2 = ' Release that request first (its pull'.
+        part_3 = ' request merged), or remove the object from'.
+        part_4 = ' this request. Then release again.'.
+        is_refused = abap_true.
 
       WHEN review_is_pending.
         part_1 = |{ request } is not released:|.

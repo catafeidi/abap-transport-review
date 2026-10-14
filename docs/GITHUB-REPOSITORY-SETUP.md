@@ -67,7 +67,9 @@ Run `review` only after the default branch has its first content: until then nob
 
 A pull request needs an approval from somebody other than the person who opened it, so make sure a second reviewer exists before switching `review` on.
 
-**Status checks** are not in the script. If you add a required status check to the ruleset (for example the abaplint workflow of `github-templates/`), the tools respect it: while a required check has not passed, GitHub does not report the pull request as mergeable, so the release of the request is refused.
+To keep pull requests in order, run `review` with a required status check: `REQUIRED_CHECK=<name of the check> bash github-protect-master.sh <owner> review <repository>`. The ruleset then also requires the branch to be up to date with the default branch ("strict" policy, GitHub ties it to a required check). A pull request that was pushed before another one was merged shows "This branch is out-of-date" and cannot be merged, and the release of its request is refused, until "Update branch" was pressed or the system pushed it again. To switch it off, remove the rule "Require status checks to pass" from the ruleset under Settings, Rules, Rulesets.
+
+**Other status checks** are not in the script. If you add a required status check to the ruleset (for example the abaplint workflow of `github-templates/`), the tools respect it: while a required check has not passed, GitHub does not report the pull request as mergeable, so the release of the request is refused.
 
 <!-- screenshot, see docs/images/README.md
 ![Ruleset settings](images/10-ruleset-settings.png)

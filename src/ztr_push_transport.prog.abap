@@ -50,6 +50,11 @@
 *& carries goes to content/ as JSON: table rows, variants, profiles, OTR
 *& texts, SAP Note entries (class ZCL_TR_CONTENT). Transports of
 *& copies are never pushed.
+*& The file of an object in Git is the complete object as it is active on
+*& this system, also when the transport holds only a part of it, a method
+*& for example. When such an object is also in a task of ANOTHER request
+*& that is not released, the log and the pull request say so, with the
+*& request and its owner: that work is in the file too.
 *& P_BASELN         -> no transport: compares every object of the packages
 *&                      with GitHub and writes the content above for all of
 *&                      them, to review/CONTENT-BASELINE, and lists what
@@ -145,6 +150,11 @@ CLASS lcl_transport_push DEFINITION FINAL.
     DATA is_busy          TYPE abap_bool READ-ONLY.
     " Entries of the transport that nothing can write to Git.
     DATA not_in_git       TYPE i READ-ONLY.
+    " Objects of the transport that are also in a request that is not released:
+    " the Git file of such an object holds that work too, and the transport
+    " does not. How many, and the first one for the refusal message.
+    DATA open_elsewhere       TYPE i READ-ONLY.
+    DATA first_open_elsewhere TYPE string READ-ONLY.
     DATA first_not_in_git TYPE string READ-ONLY.
 
   PRIVATE SECTION.
@@ -195,6 +205,7 @@ CLASS lcl_transport_push DEFINITION FINAL.
         unstable TYPE string VALUE 'unstable',
         hooks    TYPE string VALUE 'has_hooks',
         blocked  TYPE string VALUE 'blocked',
+        behind   TYPE string VALUE 'behind',
       END OF merge_state.
     CONSTANTS seconds_between_attempts TYPE i VALUE 10.
     CONSTANTS attempts_by_hand         TYPE i VALUE 6.
@@ -207,6 +218,7 @@ CLASS lcl_transport_push DEFINITION FINAL.
     CONSTANTS transport_documentation  TYPE dokhl-id VALUE 'TA'.
     CONSTANTS documentation_heading    TYPE string VALUE `## Documentation from SAP`.
     CONSTANTS not_in_git_heading       TYPE string VALUE `## Not in Git`.
+    CONSTANTS other_requests_heading   TYPE string VALUE `## Also in requests that are not released`.
     CONSTANTS baseline_name            TYPE trkorr VALUE 'CONTENT-BASELINE'.
     CONSTANTS transport_of_copies      TYPE trfunction VALUE 'T'.
 
@@ -222,6 +234,11 @@ CLASS lcl_transport_push DEFINITION FINAL.
     DATA base_override   TYPE string.
     DATA package_pattern TYPE devclass.
     DATA is_baseline     TYPE abap_bool.
+    " Objects of this push that are also in another request that is not
+    " released, one line each, for the pull request.
+    DATA other_requests_text TYPE string.
+    " Set by is_only_restricted: the pull request is behind the base branch.
+    DATA is_behind           TYPE abap_bool.
 
     METHODS read_header
       RAISING
@@ -298,14 +315,20 @@ CLASS lcl_transport_push DEFINITION FINAL.
         zcx_abapgit_exception.
     TYPES:
       BEGIN OF ty_in_work,
-        object   TYPE tadir-object,
-        obj_name TYPE tadir-obj_name,
-        trkorr   TYPE trkorr,
+        object      TYPE tadir-object,
+        obj_name    TYPE tadir-obj_name,
+        trkorr      TYPE trkorr,
+        request     TYPE trkorr,
+        owner       TYPE e070-as4user,
+        is_copy     TYPE abap_bool,
       END OF ty_in_work.
     TYPES ty_in_work_list TYPE STANDARD TABLE OF ty_in_work WITH DEFAULT KEY.
     METHODS open_request_objects
       RETURNING
         VALUE(result) TYPE ty_in_work_list.
+    METHODS warn_about_other_requests
+      IMPORTING
+        objects TYPE ty_main_objects.
     METHODS repository_packages
       IMPORTING
         repository    TYPE REF TO zif_abapgit_repo_online
@@ -547,6 +570,9 @@ CLASS lcl_transport_push IMPLEMENTATION.
     wait_for_lock( ).
 
     DATA(objects) = main_objects( ).
+    " Also in the check before a release: the BAdI refuses a request whose
+    " objects are in a request that is not released (status C).
+    warn_about_other_requests( objects ).
 
     " Entries that neither abapGit nor ZCL_TR_CONTENT can write.
     DATA(content_entries) = COND zcl_tr_content=>ty_entries(
@@ -1051,14 +1077,18 @@ CLASS lcl_transport_push IMPLEMENTATION.
     " objects: a method in an open task stands for its class.
     DATA directory_entry TYPE tadir.
 
-    SELECT e071~trkorr, e071~pgmid, e071~object, e071~obj_name FROM e071
+    SELECT e071~trkorr, e070~strkorr, e070~as4user, e070~trfunction,
+           e071~pgmid, e071~object, e071~obj_name FROM e071
       INNER JOIN e070 ON e070~trkorr = e071~trkorr
       INTO TABLE @DATA(entries)
       WHERE e070~trstatus IN ('D','L').
 
     LOOP AT entries INTO DATA(entry).
+      DATA(entry_request) = COND trkorr( WHEN entry-strkorr IS INITIAL THEN entry-trkorr ELSE entry-strkorr ).
+      DATA(is_copy) = xsdbool( entry-trfunction = transport_of_copies ).
       IF entry-pgmid = program_id-complete_object.
-        APPEND VALUE #( object = entry-object obj_name = entry-obj_name trkorr = entry-trkorr ) TO result.
+        APPEND VALUE #( object = entry-object obj_name = entry-obj_name trkorr = entry-trkorr
+                        request = entry_request owner = entry-as4user is_copy = is_copy ) TO result.
       ELSE.
         CLEAR directory_entry.
         CALL FUNCTION 'TR_CHECK_TYPE'
@@ -1068,12 +1098,43 @@ CLASS lcl_transport_push IMPLEMENTATION.
             we_tadir = directory_entry.
         IF directory_entry-object IS NOT INITIAL.
           APPEND VALUE #( object = directory_entry-object obj_name = directory_entry-obj_name
-                          trkorr = entry-trkorr ) TO result.
+                          trkorr = entry-trkorr request = entry_request owner = entry-as4user
+                          is_copy = is_copy ) TO result.
         ENDIF.
       ENDIF.
     ENDLOOP.
-    SORT result BY object obj_name.
-    DELETE ADJACENT DUPLICATES FROM result COMPARING object obj_name.
+    " One row per object and request: the baseline needs the object only,
+    " the warning also the request and its owner.
+    SORT result BY object obj_name request trkorr.
+    DELETE ADJACENT DUPLICATES FROM result COMPARING object obj_name request.
+  ENDMETHOD.
+
+
+  METHOD warn_about_other_requests.
+    " The file of an object in Git is the complete object as it is active on
+    " this system. A class changed by this request holds every method of it,
+    " also the ones of a task that is not released. Say so in the log, and
+    " in the pull request through other_requests_text.
+    CLEAR: other_requests_text, open_elsewhere, first_open_elsewhere.
+
+    LOOP AT open_request_objects( ) INTO DATA(in_work)
+         WHERE request <> me->request AND is_copy = abap_false.
+      IF NOT line_exists( objects[ object = in_work-object obj_name = in_work-obj_name ] ).
+        CONTINUE.
+      ENDIF.
+      DATA(line) = |{ in_work-object } { in_work-obj_name }: request { in_work-request }, { in_work-owner }|.
+      open_elsewhere = open_elsewhere + 1.
+      IF first_open_elsewhere IS INITIAL.
+        first_open_elsewhere = |{ in_work-obj_name } is also in { in_work-request } ({ in_work-owner })|.
+      ENDIF.
+      log( |Also in a request that is not released: { line }| ).
+      other_requests_text = COND #( WHEN other_requests_text IS INITIAL THEN `` ELSE |{ other_requests_text }\n| ) &&
+                            |- { line }|.
+    ENDLOOP.
+
+    IF other_requests_text IS NOT INITIAL.
+      log( |The file in Git is the whole object as it is active here, with that work in it| ).
+    ENDIF.
   ENDMETHOD.
 
 
@@ -1410,6 +1471,9 @@ CLASS lcl_transport_push IMPLEMENTATION.
     IF sy-subrc <> 0.
       FIND |\n{ not_in_git_heading }| IN result MATCH OFFSET cut.
     ENDIF.
+    IF sy-subrc <> 0.
+      FIND |\n{ other_requests_heading }| IN result MATCH OFFSET cut.
+    ENDIF.
     IF sy-subrc = 0.
       result = substring( val = result len = cut ).
     ENDIF.
@@ -1426,6 +1490,13 @@ CLASS lcl_transport_push IMPLEMENTATION.
     text = not_in_git_text( ).
     IF text IS NOT INITIAL.
       result = |{ result }\n\n{ not_in_git_heading }\n\n{ text }|.
+    ENDIF.
+
+    IF other_requests_text IS NOT INITIAL.
+      result = |{ result }\n\n{ other_requests_heading }\n\n| &&
+               |The file of an object in Git is the complete object as it is active on SAP. | &&
+               |These objects are also in a request that is not released, and that work is in the file:\n\n| &&
+               |{ other_requests_text }|.
     ENDIF.
   ENDMETHOD.
 
@@ -1725,7 +1796,7 @@ CLASS lcl_transport_push IMPLEMENTATION.
     DATA(repository_name) = segment( val = github index = 2 sep = '/' ).
     DATA(query) = |query\{repository(owner:"{ owner_name }",name:"{ repository_name }")| &&
                   |\{pullRequest(number:{ pull_request-number })| &&
-                  |\{reviewDecision mergeable reviewThreads(first:100)\{nodes\{isResolved\}\}| &&
+                  |\{reviewDecision mergeable mergeStateStatus reviewThreads(first:100)\{nodes\{isResolved\}\}| &&
                   | commits(last:1)\{nodes\{commit\{oid statusCheckRollup\{state\}\}\}\}\}\}\}|.
 
     TRY.
@@ -1743,6 +1814,13 @@ CLASS lcl_transport_push IMPLEMENTATION.
 
         DATA(data_node) = zcl_abapgit_ajson=>parse( response ).
         DATA(found) = data_node->slice( '/data/repository/pullRequest' ).
+        " The ruleset wants the branch up to date with the base branch: GitHub
+        " refuses the merge of a pull request that is behind, also the merge
+        " of this report. Do not release a request on the strength of it.
+        IF found->get_string( '/mergeStateStatus' ) = 'BEHIND'.
+          is_behind = abap_true.
+          RETURN.
+        ENDIF.
         IF found->get_string( '/reviewDecision' ) <> 'APPROVED' OR
            found->get_string( '/mergeable' ) <> 'MERGEABLE' OR
            found->get_string( '/commits/nodes/1/commit/oid' ) <> pull_request-head.
@@ -1772,6 +1850,7 @@ CLASS lcl_transport_push IMPLEMENTATION.
     DATA(name) = repository->zif_abapgit_repo~get_name( ).
     DATA(head) = substring_after( val = review sub = zif_abapgit_git_definitions=>c_git_branch-heads_prefix ).
 
+    CLEAR is_behind.
     TRY.
         DATA(pull_request) = open_pull_request(
           repository = repository
@@ -1787,6 +1866,9 @@ CLASS lcl_transport_push IMPLEMENTATION.
           approved = approved + 1.
           log( |{ name }: pull request { pull_request-number } is approved, it is merged after the release| ).
           RETURN.
+        ELSEIF is_behind = abap_true OR pull_request-state = merge_state-behind.
+          pending        = pending + 1.
+          pending_detail = |pull request { pull_request-number } is behind { base }: press Update branch on it|.
         ELSEIF pull_request-state = merge_state-blocked.
           pending        = pending + 1.
           pending_detail = |pull request { pull_request-number } is not approved yet|.
@@ -1947,6 +2029,8 @@ START-OF-SELECTION.
     " of a request.
     "   O = the base branch is complete
     "   A = the review branch is complete and its pull request is approved
+    "   C = an object of the request is also in another request that is not
+    "       released (checked before D, P and A)
     "   D = files differ, they are not reviewed
     "   P = the pull request is missing or not approved
     "   B = another push is running
@@ -1965,6 +2049,15 @@ START-OF-SELECTION.
     ELSEIF error_text IS NOT INITIAL.
       check_status = 'E'.
       check_detail = error_text.
+    ELSEIF push->open_elsewhere > 0 AND
+           ( push->differences > 0 OR push->pending > 0 OR push->approved > 0 ).
+      " Not when everything is on the base branch already: nothing is
+      " pushed or merged then, so no foreign work travels with it.
+      check_status = 'C'.
+      check_detail = push->first_open_elsewhere.
+      IF push->open_elsewhere > 1.
+        check_detail = |{ check_detail } (+{ push->open_elsewhere - 1 })|.
+      ENDIF.
     ELSEIF push->differences > 0.
       check_status = 'D'.
       check_detail = push->first_difference.

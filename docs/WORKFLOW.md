@@ -42,7 +42,7 @@ How the issue key of a ticket system reaches these texts: [JIRA.md](JIRA.md).
 
 ## What stops a release without review
 
-When a request with objects under Git is released, the BAdI asks one question: is the current state of every object of this request reviewed? "Current state" is exact: each file is compared with the branch. A file that differs in content, a file that is missing on the branch, and a file on the branch that no longer exists on the system all count as a difference. Other objects are not looked at, so open work of other requests does not matter.
+When a request with objects under Git is released, the BAdI asks one question: is the current state of every object of this request reviewed? "Current state" is exact: each file is compared with the branch. A file that differs in content, a file that is missing on the branch, and a file on the branch that no longer exists on the system all count as a difference. Open work of other requests is looked at in one way only: see "Release order" below.
 
 Reviewed means one of two things:
 
@@ -53,6 +53,7 @@ Reviewed means one of two things:
 |---|---|
 | On the review branch, pull request approved (status A) | The release goes on. Job `GIT_MERGE_<request>` squashes and merges the pull request as soon as the request is released. |
 | On the base branch already, no review branch (status O) | The release goes on. Nothing to merge. |
+| An object of the request is also in another request that is not released (status C) | The release is refused, whatever the rest says. The message names the object and the other request. See "Release order". |
 | Pull request not opened, not approved, or cannot be merged (status P) | The release is refused. The message names the pull request. |
 | Files differ from the review branch, or from the base branch when there is no review branch (status D) | The release is refused. A job pushes the objects of the request to `review/<request>`. A new commit cancels an approval given before, so the change is reviewed again. |
 | Another push is running (status B) | The release is refused with the advice to try again in a minute. The check waits up to 60 seconds for the lock first. |
@@ -66,6 +67,19 @@ The merge is done by GitHub under its own rules. SAP asks for it with the GitHub
 The merge happens after the release, not before, so that a release that fails in a later check leaves the base branch untouched. If the request is not released within 10 minutes of the start of the job, the job ends without merging.
 
 **One deliberate exit:** a request whose short text contains `#NOREVIEW` is released without the check. Use it for an emergency only; the marker stays visible in the request. It only affects the release of the request: its tasks are still pushed and their pull request is opened as usual. At the release of the request there is no login check, no review check and no merge job, so the pull request stays open and the base branch does not get the change. Afterwards an admin merges it on GitHub, or the next request on the same objects pushes it for review again.
+
+### Release order
+
+SAP knows no order between requests: the transport queue of a target system follows the time of release, not the dependencies. The file of an object in Git is the whole object as it is active on the development system, also the parts of it that sit in another request. The transport of a request, on the other hand, can hold only a part of the object (the public section of a class, one method). If request B is imported without the request that holds the other part, the target system gets a combination that never existed on the development system. A real case: a class whose method was declared in the private section of the target system, while request B added the declaration to the public section and did not carry the private section. The import stopped with "Method was already declared".
+
+Two rules keep the order:
+
+1. **The base branch is the order.** A request is released only after its pull request is approved, and the pull request must be up to date with the base branch (the ruleset script, mode `review`, with `REQUIRED_CHECK`, see `GITHUB-REPOSITORY-SETUP.md`). So requests reach the base branch one after the other, and every system imports in that order, always with "Import all". Never pick single requests out of the queue.
+2. **No object in two requests.** The check refuses the release of a request when one of its objects, also only a part of it, is in another request that is not released (status C). The message names the object and the other request. Release that request first, or remove the object from this one. Work of the same developer in two open requests counts too. A request whose objects are all on the base branch already is not refused. Emergency exit: `#NOREVIEW` in the request text.
+
+A pull request that is behind the base branch does not count as approved either: the merge would be refused after the release. The message says to press "Update branch" on the pull request, or to release a new task so that the system pushes it again.
+
+Not checked: an object that is in another request which is released, but whose pull request is not merged yet. Merge in the order of release.
 
 ### How a refusal shows
 
