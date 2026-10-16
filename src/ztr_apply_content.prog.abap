@@ -147,18 +147,26 @@ CLASS lcl_report IMPLEMENTATION.
     ENDIF.
 
     DATA(previous) = repository->get_selected_branch( ).
-    IF previous <> branch.
-      repository->select_branch( branch ).
-    ENDIF.
+    " CLEANUP gives the lock back when an exception leaves this block.
     TRY.
-        repository->zif_abapgit_repo~refresh( iv_drop_cache = abap_true ).
-        result = repository->zif_abapgit_repo~get_files_remote( ).
-      CATCH zcx_abapgit_exception INTO error.
-        " handled below, after the branch is switched back
+        IF previous <> branch.
+          repository->select_branch( branch ).
+        ENDIF.
+        TRY.
+            repository->zif_abapgit_repo~refresh( iv_drop_cache = abap_true ).
+            result = repository->zif_abapgit_repo~get_files_remote( ).
+          CATCH zcx_abapgit_exception INTO error.
+            " handled below, after the branch is switched back
+        ENDTRY.
+        IF previous <> branch.
+          repository->select_branch( previous ).
+        ENDIF.
+      CLEANUP.
+        CALL FUNCTION 'DEQUEUE_ES_PROG'
+          EXPORTING
+            name   = 'ZTR_PUSH_LOCK'
+            _scope = '1'.
     ENDTRY.
-    IF previous <> branch.
-      repository->select_branch( previous ).
-    ENDIF.
     CALL FUNCTION 'DEQUEUE_ES_PROG'
       EXPORTING
         name   = 'ZTR_PUSH_LOCK'

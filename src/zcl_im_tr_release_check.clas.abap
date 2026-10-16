@@ -149,13 +149,28 @@ METHOD if_ex_cts_request_check~check_before_release.
     RETURN.
   ENDIF.
 
+  " Workbench and customizing, tasks and requests. Never transports of
+  " copies, relocations or other types.
+  IF type <> development_task AND type <> repair_task AND type <> workbench_request AND
+     type <> customizing_task AND type <> customizing_request.
+    RETURN.
+  ENDIF.
+  DATA(is_request) = xsdbool( type = workbench_request OR type = customizing_request ).
+  IF is_request = abap_true AND text CS skip_marker.
+    RETURN.
+  ENDIF.
+
   TRY.
   " Only tasks and requests that carry objects of the packages under Git
   " on this system: STVARV ZTR_PACKAGES, default Z*. The package of an
   " object is read from the object directory; only an object without
   " an entry (a deleted one) is judged by its name.
   DATA(package_pattern) = zcl_tr_auth=>packages( ).
-  LOOP AT objects INTO DATA(object_entry).
+  " Every object once: a request often holds the same object in several tasks.
+  DATA(distinct_objects) = objects.
+  SORT distinct_objects BY pgmid object obj_name.
+  DELETE ADJACENT DUPLICATES FROM distinct_objects COMPARING pgmid object obj_name.
+  LOOP AT distinct_objects INTO DATA(object_entry).
     CLEAR: object_package, directory_entry.
     IF object_entry-pgmid = 'R3TR'.
       SELECT SINGLE devclass FROM tadir
@@ -191,17 +206,6 @@ METHOD if_ex_cts_request_check~check_before_release.
     ENDIF.
   ENDLOOP.
   IF is_under_git = abap_false.
-    RETURN.
-  ENDIF.
-
-  " Workbench and customizing, tasks and requests. Never transports of
-  " copies, relocations or other types.
-  IF type <> development_task AND type <> repair_task AND type <> workbench_request AND
-     type <> customizing_task AND type <> customizing_request.
-    RETURN.
-  ENDIF.
-  DATA(is_request) = xsdbool( type = workbench_request OR type = customizing_request ).
-  IF is_request = abap_true AND text CS skip_marker.
     RETURN.
   ENDIF.
 

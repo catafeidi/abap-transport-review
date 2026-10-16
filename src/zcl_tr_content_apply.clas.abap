@@ -496,8 +496,11 @@ CLASS ZCL_TR_CONTENT_APPLY IMPLEMENTATION.
 
     DATA(header) = content-header.
     header-mandt = sy-mandt.
+    " The rows of the file belong to the variant that was checked above, whatever the rows say.
     LOOP AT content-texts ASSIGNING <text>.
-      <text>-mandt = sy-mandt.
+      <text>-mandt   = sy-mandt.
+      <text>-report  = report.
+      <text>-variant = variant.
     ENDLOOP.
 
     IF by_function = abap_true.
@@ -532,8 +535,10 @@ CLASS ZCL_TR_CONTENT_APPLY IMPLEMENTATION.
       ENDIF.
     ELSE.
       LOOP AT content-raw_values ASSIGNING <raw>.
-        <raw>-mandt = sy-mandt.
-        <raw>-vdate = sy-datum.
+        <raw>-mandt   = sy-mandt.
+        <raw>-report  = report.
+        <raw>-variant = variant.
+        <raw>-vdate   = sy-datum.
         <raw>-vtime = sy-uzeit.
       ENDLOOP.
       DELETE FROM vari  WHERE report = report AND variant = variant.
