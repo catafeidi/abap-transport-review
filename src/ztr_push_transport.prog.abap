@@ -219,6 +219,10 @@ CLASS lcl_transport_push DEFINITION FINAL.
     CONSTANTS documentation_heading    TYPE string VALUE `## Documentation from SAP`.
     CONSTANTS not_in_git_heading       TYPE string VALUE `## Not in Git`.
     CONSTANTS other_requests_heading   TYPE string VALUE `## Also in requests that are not released`.
+    CONSTANTS missing_texts_heading    TYPE string VALUE `## Missing translations`.
+    " Lines of the section "Missing translations" at most; the rest is
+    " counted, the report lists all.
+    CONSTANTS missing_texts_shown      TYPE i VALUE 25.
     CONSTANTS baseline_name            TYPE trkorr VALUE 'CONTENT-BASELINE'.
     CONSTANTS transport_of_copies      TYPE trfunction VALUE 'T'.
 
@@ -347,6 +351,15 @@ CLASS lcl_transport_push DEFINITION FINAL.
       RAISING
         zcx_abapgit_exception.
     METHODS not_in_git_text
+      RETURNING
+        VALUE(result) TYPE string.
+    "! The texts of the objects of the request that have no translation in
+    "! a required language, as a Markdown table; empty when nothing is
+    "! missing, when the translation check is not set up, when the request
+    "! carries #NOTRANSL, or when the check fails (it never stops a push).
+    "! In the pull request, so that a release from ADT, which shows no
+    "! message of the check, still makes the missing texts visible.
+    METHODS missing_texts_text
       RETURNING
         VALUE(result) TYPE string.
     METHODS stage_objects
@@ -1474,6 +1487,9 @@ CLASS lcl_transport_push IMPLEMENTATION.
     IF sy-subrc <> 0.
       FIND |\n{ other_requests_heading }| IN result MATCH OFFSET cut.
     ENDIF.
+    IF sy-subrc <> 0.
+      FIND |\n{ missing_texts_heading }| IN result MATCH OFFSET cut.
+    ENDIF.
     IF sy-subrc = 0.
       result = substring( val = result len = cut ).
     ENDIF.
@@ -1497,6 +1513,54 @@ CLASS lcl_transport_push IMPLEMENTATION.
                |The file of an object in Git is the complete object as it is active on SAP. | &&
                |These objects are also in a request that is not released, and that work is in the file:\n\n| &&
                |{ other_requests_text }|.
+    ENDIF.
+
+    text = missing_texts_text( ).
+    IF text IS NOT INITIAL.
+      result = |{ result }\n\n{ missing_texts_heading }\n\n{ text }|.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD missing_texts_text.
+    DATA rows TYPE string_table.
+
+    IF zcl_tr_transl_check=>configured_languages( ) IS INITIAL.
+      RETURN.
+    ENDIF.
+    SELECT SINGLE as4text FROM e07t INTO @DATA(request_text) WHERE trkorr = @request.
+    IF request_text CS zcl_tr_transl_check=>skip_marker.
+      RETURN.
+    ENDIF.
+
+    TRY.
+        DATA(findings) = NEW zcl_tr_transl_check( )->check_transport( request ).
+      CATCH cx_root INTO DATA(error).
+        log( |translation check not run for the pull request: { error->get_text( ) }| ).
+        RETURN.
+    ENDTRY.
+    DELETE findings WHERE status <> zcl_tr_transl_check=>status-missing.
+    IF findings IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    LOOP AT findings INTO DATA(finding) TO missing_texts_shown.
+      " A | in a text would end the cell of the Markdown table.
+      DATA(source) = replace( val = condense( CONV string( finding-source_text ) ) sub = `|` with = `\|` occ = 0 ).
+      APPEND |\| { finding-object } { condense( finding-obj_name ) } \| { finding-text_kind } \| | &&
+             |{ zcl_tr_transl_check=>language_code( finding-language ) } \| { source } \||
+             TO rows.
+    ENDLOOP.
+    DATA(count) = lines( findings ).
+    result = |{ count } text(s) of the objects of { request } have no translation. | &&
+             |Translate them in a task of this request: report { zcl_tr_transl_check=>report_name } | &&
+             |with the request, "Enter translations", Save; then release the task.\n\n| &&
+             |\| Object \| Kind of text \| Missing in \| Source text \|\n| &&
+             |\|---\|---\|---\|---\|\n| &&
+             concat_lines_of( table = rows sep = |\n| ).
+    IF count > missing_texts_shown.
+      result = |{ result }\n\nand { count - missing_texts_shown } more: report { zcl_tr_transl_check=>report_name } | &&
+               |lists them all.|.
     ENDIF.
   ENDMETHOD.
 

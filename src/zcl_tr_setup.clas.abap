@@ -18,6 +18,10 @@ CLASS zcl_tr_setup DEFINITION
         abaplint_packages TYPE ty_packages,
         clean_abap        TYPE abap_bool,
         replace_existing  TYPE abap_bool,
+        transl_languages  TYPE zcl_tr_transl_check=>ty_languages,
+        transl_mode       TYPE string,
+        transl_record     TYPE abap_bool,
+        transl_exclude    TYPE zcl_tr_transl_check=>ty_name_range,
         write             TYPE abap_bool,
       END OF ty_settings.
 
@@ -73,6 +77,7 @@ CLASS zcl_tr_setup DEFINITION
   PRIVATE SECTION.
     CONSTANTS ssl_client        TYPE ssfapplssl VALUE 'ANONYM'.
     CONSTANTS release_check     TYPE exit_imp VALUE 'ZTR_RELEASE_CHECK'.
+    CONSTANTS translation_check TYPE exit_imp VALUE 'ZTR_TRANSL_CHECK'.
     CONSTANTS export_feedback   TYPE exit_imp VALUE 'ZTR_EXPORT'.
     CONSTANTS abaplint_global   TYPE tabname VALUE 'ZABAPLINT_GLOB'.
     CONSTANTS abaplint_package  TYPE tabname VALUE 'ZABAPLINT_PACK'.
@@ -122,6 +127,10 @@ CLASS zcl_tr_setup DEFINITION
       IMPORTING
         name  TYPE rvari_vnam
         value TYPE csequence.
+    METHODS set_select_option
+      IMPORTING
+        name  TYPE rvari_vnam
+        range TYPE zcl_tr_transl_check=>ty_name_range.
     METHODS write_abaplint.
     METHODS clean_abap_json
       RETURNING
@@ -142,6 +151,7 @@ CLASS zcl_tr_setup DEFINITION
     METHODS check_repositories.
     METHODS check_release_settings.
     METHODS check_abaplint.
+    METHODS check_translations.
     METHODS manual_steps.
 ENDCLASS.
 
@@ -214,6 +224,7 @@ CLASS zcl_tr_setup IMPLEMENTATION.
     check_repositories( ).
     check_release_settings( ).
     check_abaplint( ).
+    check_translations( ).
     manual_steps( ).
 
     line( kind = state-blank
@@ -338,6 +349,17 @@ CLASS zcl_tr_setup IMPLEMENTATION.
     set_parameter( name = parameter_name-require_complete value = settings-require_complete ).
     set_parameter( name = parameter_name-variant_pattern  value = settings-variant_pattern ).
     set_parameter( name = parameter_name-variant_package  value = settings-variant_package ).
+    " Translation check. OFF is the default and is not stored.
+    set_parameter( name  = zcl_tr_transl_check=>parameter_name-mode
+                   value = COND string( WHEN settings-transl_mode = zcl_tr_transl_check=>mode-off THEN ``
+                                        ELSE settings-transl_mode ) ).
+    set_select_option( name  = zcl_tr_transl_check=>parameter_name-languages
+                       range = VALUE #( FOR language IN settings-transl_languages
+                                        ( sign = 'I' option = 'EQ' low = language ) ) ).
+    set_select_option( name  = zcl_tr_transl_check=>parameter_name-exclude
+                       range = settings-transl_exclude ).
+    set_parameter( name  = zcl_tr_transl_check=>parameter_name-record
+                   value = COND string( WHEN settings-transl_record = abap_true THEN `X` ELSE `` ) ).
     write_abaplint( ).
     COMMIT WORK.
   ENDMETHOD.
@@ -362,6 +384,88 @@ CLASS zcl_tr_setup IMPLEMENTATION.
     entry-low  = value.
     MODIFY tvarvc FROM entry.
     line( kind = state-ok text = |STVARV { name } = { value }| ).
+  ENDMETHOD.
+
+
+  METHOD set_select_option.
+    " The rows of a STVARV select option are replaced as a whole; no row
+    " removes the select option.
+    DATA entry  TYPE tvarvc.
+    DATA values TYPE string_table.
+
+    DELETE FROM tvarvc WHERE name = name AND type = 'S'.
+    IF range IS INITIAL.
+      IF sy-subrc = 0.
+        line( kind = state-info text = |STVARV { name }: removed| ).
+      ENDIF.
+      RETURN.
+    ENDIF.
+
+    LOOP AT range INTO DATA(row).
+      CLEAR entry.
+      entry-name = name.
+      entry-type = 'S'.
+      entry-numb = sy-tabix - 1.
+      entry-sign = row-sign.
+      entry-opti = row-option.
+      entry-low  = row-low.
+      entry-high = row-high.
+      INSERT tvarvc FROM entry.
+      APPEND |{ row-option } { row-low }| TO values.
+    ENDLOOP.
+    line( kind = state-ok text = |STVARV { name } = { concat_lines_of( table = values sep = `, ` ) }| ).
+  ENDMETHOD.
+
+
+  METHOD check_translations.
+    DATA names TYPE string_table.
+
+    heading( 'Translation check at release' ).
+
+    SELECT SINGLE active FROM sxc_attr
+      INTO @DATA(active)
+      WHERE imp_name = @translation_check.
+    IF sy-subrc <> 0.
+      line( kind = state-todo
+            text = |BAdI implementation { translation_check } (CTS_REQUEST_CHECK) is missing: pull the tools with abapGit| ).
+    ELSEIF active = abap_true.
+      line( kind = state-ok text = |Translation check { translation_check } (CTS_REQUEST_CHECK) is active| ).
+    ELSE.
+      line( kind = state-todo text = |Translation check { translation_check } is NOT active: SE19, activate the implementation| ).
+    ENDIF.
+
+    DATA(languages) = zcl_tr_transl_check=>configured_languages( ).
+    IF languages IS INITIAL.
+      line( kind = state-info
+            text = |No required languages (STVARV { zcl_tr_transl_check=>parameter_name-languages }): the check does nothing| ).
+    ELSE.
+      line( kind = state-ok text = |Required languages: { concat_lines_of( table = languages sep = `, ` ) }| ).
+    ENDIF.
+
+    CASE zcl_tr_transl_check=>configured_mode( ).
+      WHEN zcl_tr_transl_check=>mode-block.
+        line( kind = state-ok text = 'Mode BLOCK: a task or request with a missing translation is not released' ).
+      WHEN zcl_tr_transl_check=>mode-inform.
+        line( kind = state-info text = 'Mode INFORM: missing translations are shown at release, the release goes on' ).
+      WHEN OTHERS.
+        line( kind = state-info
+              text = |Mode OFF: no check at release. Report { zcl_tr_transl_check=>report_name } lists the missing translations| ).
+    ENDCASE.
+
+    IF zcl_tr_transl_check=>configured_record( ) = abap_true.
+      line( kind = state-ok
+            text = 'Recording: the translations of the released objects are recorded in the task' ).
+    ELSE.
+      line( kind = state-info
+            text = |No recording at release (STVARV { zcl_tr_transl_check=>parameter_name-record })| ).
+    ENDIF.
+
+    LOOP AT zcl_tr_transl_check=>configured_exclusions( ) INTO DATA(exclusion).
+      APPEND |{ exclusion-option } { exclusion-low }| TO names.
+    ENDLOOP.
+    IF names IS NOT INITIAL.
+      line( kind = state-info text = |Object names never checked: { concat_lines_of( table = names sep = `, ` ) }| ).
+    ENDIF.
   ENDMETHOD.
 
 

@@ -74,9 +74,9 @@ No SM59 destination is needed: the tools call GitHub through SSL client `ANONYM`
 
 | Object | Kind | Check |
 |---|---|---|
-| `ZTR_SETUP`, `ZTR_GITHUB_LOGIN`, `ZTR_PUSH_TRANSPORT`, `ZTR_APPLY_CONTENT` | reports | SA38 finds them |
-| `ZCL_TR_AUTH`, `ZCL_TR_CONTENT`, `ZCL_TR_CONTENT_APPLY`, `ZCL_ABAPGIT_USER_EXIT`, `ZCL_IM_TR_RELEASE_CHECK` | classes | SE24 finds them, active |
-| `ZTR_RELEASE_CHECK` | BAdI implementation of `CTS_REQUEST_CHECK` | SE19 shows it active |
+| `ZTR_SETUP`, `ZTR_GITHUB_LOGIN`, `ZTR_PUSH_TRANSPORT`, `ZTR_APPLY_CONTENT`, `ZTR_TRANSL_REPORT` | reports | SA38 finds them |
+| `ZCL_TR_AUTH`, `ZCL_TR_CONTENT`, `ZCL_TR_CONTENT_APPLY`, `ZCL_ABAPGIT_USER_EXIT`, `ZCL_IM_TR_RELEASE_CHECK`, `ZCL_TR_TRANSL_CHECK`, `ZCL_TR_TRANSL_FILE`, `ZCL_TR_TRANSL_HARDCODED`, `ZCL_TR_TRANSL_TABLE_TEXTS`, `ZCL_IM_TR_TRANSL_CHECK` | classes | SE24 finds them, active |
+| `ZTR_RELEASE_CHECK`, `ZTR_TRANSL_CHECK` | BAdI implementations of `CTS_REQUEST_CHECK` | SE19 shows them active. `ZTR_TRANSL_CHECK` does nothing until step 6 sets required languages and a mode other than `OFF` |
 
 - **If the BAdI implementation is not active:** SE19, open `ZTR_RELEASE_CHECK`, activate. From this moment every release of a task or request with objects under Git goes through the check.
 
@@ -94,6 +94,15 @@ Block "GitHub workflow":
 | Refuse requests with entries that cannot be written to Git | tick it only when `ZTR_PUSH_TRANSPORT` with the baseline option shows no gaps. STVARV `ZTR_REQUIRE_COMPLETE` |
 | Report variants: name pattern | optional. Report variants with such a name are written to `content/variants`. STVARV `ZTR_VARIANT_PATTERN` |
 | Report variants: package | optional. The package that owns those variants; it decides the repository they go to. STVARV `ZTR_VARIANT_PACKAGE` |
+
+Block "Translation check at release" (optional, see [TRANSLATION-CHECK.md](TRANSLATION-CHECK.md)):
+
+| Field on the screen | What to enter |
+|---|---|
+| Required languages | the languages every user-visible text must have, for example `D` and `E`. STVARV `ZTR_TRANSL_LANGUAGES`. Empty: the check does nothing |
+| Mode | `OFF` (default: no check at release, the report still works), `INFORM` (show, the release goes on) or `BLOCK` (refuse the release). STVARV `ZTR_TRANSL_MODE`. Start with `OFF`, run `ZTR_TRANSL_REPORT`, then `INFORM` |
+| At release: record the existing translations in the task | off by default; test it before you switch it on. STVARV `ZTR_TRANSL_RECORD` |
+| Object names never checked | optional, for example internal tools. STVARV `ZTR_TRANSL_EXCLUDE` |
 
 Block "abaplint client (only if it is installed)": see [ABAPLINT-IN-SAP.md](ABAPLINT-IN-SAP.md). Leave it empty if you do not use abaplint.
 
@@ -113,7 +122,7 @@ An empty field removes the parameter, so the default applies again.
 ![ZTR_SETUP output](images/01-setup-report-green-lights.png)
 *What to look at: no red line.*
 
-- **If not:** each red line names what is missing and what to do. The lines are, in order: abapGit version, the user exit, the release check and whether it is active, whether an old BAdI implementation of `CTS_EXPORT_FEEDBACK` (`ZTR_EXPORT`) is active (deactivate it: its job runs as `DDIC`, who has no GitHub account), documentation objects with a namespace, GitHub over SSL, the device flow of the App, the login of your user, the linked repositories and the access to them, release settings, abaplint. The list of what the report cannot do is at the end.
+- **If not:** each red line names what is missing and what to do. The lines are, in order: abapGit version, the user exit, the release check and whether it is active, whether an old BAdI implementation of `CTS_EXPORT_FEEDBACK` (`ZTR_EXPORT`) is active (deactivate it: its job runs as `DDIC`, who has no GitHub account), documentation objects with a namespace, GitHub over SSL, the device flow of the App, the login of your user, the linked repositories and the access to them, release settings, abaplint, the translation check. The list of what the report cannot do is at the end.
 
 ## 7. GitHub login, every developer once
 
@@ -169,6 +178,7 @@ Use a test package under Git and a test request.
 8. **Request too early:** release the request before the approval. Expected: refused, "pull request `<n>` is not approved yet".
 9. **Approve:** a colleague approves the pull request on GitHub. Do not merge it.
 10. **Release the request.** Expected: released; SM37 shows job `GIT_MERGE_<request>` with "pull request `<n>` squashed and merged"; on GitHub the pull request is merged and the review branch is gone.
+11. **Translation check** (only if set up): change a text of a test object in one required language only, release the task. Expected in mode `INFORM`: a popup in SAP GUI that names the text, "Translate now" opens `ZTR_TRANSL_REPORT`; the pull request description has a section "Missing translations". In mode `BLOCK` the release is refused until the text is translated.
 
 If something fails, [WORKFLOW.md](WORKFLOW.md) lists the results of the release check and README has a troubleshooting table.
 

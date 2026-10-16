@@ -219,6 +219,8 @@ abapGit has to be the developer version of a release that matches your system; t
 | Report `ZTR_PUSH_TRANSPORT` | The push, the pull request, the review check, the merge |
 | Class `ZCL_TR_CONTENT` | Everything a transport carries that abapGit does not write, as JSON under `content/` |
 | Class `ZCL_TR_CONTENT_APPLY`, report `ZTR_APPLY_CONTENT` | The other direction: applies the files of `content/` to another system and records them in a request |
+| Report `ZTR_TRANSL_REPORT`, classes `ZCL_TR_TRANSL_CHECK`, `ZCL_TR_TRANSL_FILE`, `ZCL_TR_TRANSL_HARDCODED`, `ZCL_TR_TRANSL_TABLE_TEXTS` | Optional translation check: lists the texts without translation in the required languages, hardcoded texts and text table entries; translate in the list or in an Excel file, saved as SE63 does and recorded in a request |
+| BAdI implementation `ZTR_TRANSL_CHECK` (`CTS_REQUEST_CHECK`), class `ZCL_IM_TR_TRANSL_CHECK` | The translation check at release: off, inform or block; `#DELIVERY` and `#NOTRANSL` markers |
 
 Not in here, on purpose: abapGit itself (package `$ABAPGIT`) and the abaplint client (package `$ABAPLINT`). Both are installed from their own public repositories.
 
@@ -230,7 +232,7 @@ Not in here, on purpose: abapGit itself (package `$ABAPGIT`) and the abaplint cl
 | `src/console/` | Optional sub-package `$ZTR_REVIEW_CONSOLE`: console classes for Eclipse ADT (see below) |
 | `docs/` | The guides, below |
 | `docker/abaplint-server-windows/` | Dockerfile of the abaplint server for a Docker host in Windows container mode |
-| `github-templates/` | What a repository gets: CODEOWNERS, abaplint action and configurations, scripts for the branch rules |
+| `github-templates/` | What a repository gets: CODEOWNERS, abaplint action and configurations, scripts for the branch rules, Copilot review instructions and a translation glossary |
 | `claude/` | A Claude Code skill for ABAP (Clean ABAP) |
 | `scripts/` | Helpers for the workstation: compile a source on a system without creating anything, read a table |
 
@@ -245,6 +247,9 @@ Not in here, on purpose: abapGit itself (package `$ABAPGIT`) and the abaplint cl
 | [docs/GITHUB-REPOSITORY-SETUP.md](docs/GITHUB-REPOSITORY-SETUP.md) | Repository settings, rulesets, CODEOWNERS, the scripts |
 | [docs/JIRA.md](docs/JIRA.md) | How a Jira issue key reaches the pull request, and what Jira and GitHub have to do |
 | [docs/NOT-IN-GIT.md](docs/NOT-IN-GIT.md) | What a transport carries beyond repository objects and where it goes |
+| [docs/TRANSPORTS.md](docs/TRANSPORTS.md) | Building transports, step by step for developers: request, task, review, merge, imports, a transport for a customer, the markers |
+| [docs/TRANSLATION-CHECK.md](docs/TRANSLATION-CHECK.md) | The translation check (optional): which texts, settings, the report, the check at release, recording |
+| [docs/TRANSLATION-GUIDE.md](docs/TRANSLATION-GUIDE.md) | Translating, step by step: in the list, in an Excel file, at release; fixing hardcoded texts |
 | [docs/ABAPLINT-IN-SAP.md](docs/ABAPLINT-IN-SAP.md) | abaplint as a Code Inspector and ATC check (optional) |
 | [docs/ATC-AT-RELEASE.md](docs/ATC-AT-RELEASE.md) | Run ATC checks at task and request release (optional) |
 | [docs/ABAPGIT-DOCV-FIX.md](docs/ABAPGIT-DOCV-FIX.md) | A note on abapGit and documentation objects with a namespace |
@@ -279,7 +284,7 @@ The messages are the ones the tools write. Where a release is refused you see th
 ## Status and limits
 
 - Written for SAP NetWeaver 7.40 SP08 and newer with abapGit (developer version); see [Supported systems](#supported-systems). The sources are ABAP 7.40 syntax.
-- **Checked:** the classes and the four reports compile without errors on 7.40 SP25 and on S/4HANA 2023; 35 unit tests of the setup, content, content-apply and login classes pass on S/4HANA 2023. `scripts/syntax-check.py` compiles a source on a system without creating anything.
+- **Checked:** the classes and the five reports compile without errors on 7.40 SP25, and all but the translation report also on S/4HANA 2023; 35 unit tests of the setup, content, content-apply and login classes and 35 unit tests of the translation classes pass on S/4HANA 2023. `scripts/syntax-check.py` compiles a source on a system without creating anything.
 - One working copy per system: abapGit keeps one selected branch per repository for all users, and the push job switches it while it runs. Do not work in the abapGit screen of a repository during a push.
 - The token of a developer is encrypted, but anyone who can run ABAP on that system can read it with their own code. Use it on development systems only.
 - Pushes run one after the other.
