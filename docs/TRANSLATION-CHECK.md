@@ -38,10 +38,17 @@ Only the texts the user sees when the product runs are required. Development its
 | OTR texts | `SOTR`, `LOTR` |
 | maintenance dialogs (SM30 title) | `TOBJ` |
 | Web Dynpro and its configurations | `WDYN`, `WD`, `WC`, `VW` |
+| labels of the elements of a CDS view (`@EndUserText`, Fiori apps) | `DDLT` |
+| UI texts of a metadata extension (Fiori annotations) | `TLGS`, name `DDLX...`, part `06` |
+| title and subtitle of a launchpad tile (app descriptor item) | `TLGS`, name `UIAD...` |
 
-Not checked, because only developers see them: descriptions of classes, interfaces, methods and attributes (`CLAS`, `INTF`), function groups and function modules with their documentation (`LBT1`, `FNC1`, `FU`, `CAD1`, `CAD4`), tables, structures, table types, views, domains, foreign keys, indexes, lock objects, search helps (`TABT`, `TABS`, `TTYP`, `VIEW`, `DOMA`, `DO`, `BEZD`, `INDX`, `ENQU`, `SHLP`), screen descriptions (`SRH1` to `SRH8`), packages, message classes, SET/GET parameters, variants (`DEVC`, `MSAG`, `SGPA`, `VARI`). The report shows them with "Also descriptions"; the release check never asks for them.
+`TLGS` is one SE63 type for the texts of many repository objects. Its object name starts with the object type (4 characters), then the object name (40), then the part of the object (2); the check decides by the object type and the part.
+
+Not checked, because only developers see them: descriptions of classes, interfaces, methods and attributes (`CLAS`, `INTF`), function groups and function modules with their documentation (`LBT1`, `FNC1`, `FU`, `CAD1`, `CAD4`), tables, structures, table types, views, domains, foreign keys, indexes, lock objects, search helps (`TABT`, `TABS`, `TTYP`, `VIEW`, `DOMA`, `DO`, `BEZD`, `INDX`, `ENQU`, `SHLP`), screen descriptions (`SRH1` to `SRH8`), packages, message classes, SET/GET parameters, variants (`DEVC`, `MSAG`, `SGPA`, `VARI`), descriptions of CDS views (`DDLS`) and of UI5 or BSP applications (`BSP`), and the other `TLGS` texts (descriptions of metadata extensions, OData models and services `IWMO`/`IWSV`, authorization object classes `SUSC`, Web Dynpro application configurations `WDCA`, ...). The report shows them with "Also descriptions"; the release check never asks for them.
 
 The list is method `IS_RUNTIME_TYPE` of `ZCL_TR_TRANSL_CHECK`; the names of the SE63 types are in table `LXE_ATTOBT`.
+
+**Not covered yet: the texts of a UI5 app itself.** They are the `i18n*.properties` files of its BSP application, not SE63 texts, so a missing `i18n_de.properties` or a missing key is not found. Neither are literals in XML views or JavaScript, launchpad catalogs and groups kept as Customizing (`/UI2/` tables), or texts typed into an OData model in SEGW instead of coming from a data element.
 
 Only objects of the packages under Git are checked: objects in a package that matches the pattern of the system (STVARV `ZTR_PACKAGES`). Local objects (`$...`) never.
 

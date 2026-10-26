@@ -151,6 +151,9 @@ The column *Kind of text* says where a text appears, so that it can be worded fo
 | Web or UI text (OTR) | texts of web user interfaces | as for screen texts |
 | Title of a maintenance view (SM30) | the title of a table maintenance screen | short |
 | Web Dynpro screen text | texts of Web Dynpro applications | as for screen texts |
+| Field label of a CDS view (Fiori app) | labels of fields and columns in Fiori apps built on the CDS view | short, as for field labels |
+| UI text of a CDS view (Fiori annotation) | headers, labels and object names of a Fiori elements app ("Object", "Objects") | short; singular and plural come as two lines |
+| Launchpad tile (title, subtitle) | title and subtitle of a tile in the Fiori launchpad | short, use the glossary term |
 | Hardcoded text in the source code | not translatable as it is | a developer moves it into a message or a text symbol |
 | Entry of a text table (SM30) | an entry of a customizing table | translated in SM30 or SE63 |
 | Other (SE63 type ...) | rare types | ask a developer where it appears |

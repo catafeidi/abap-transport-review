@@ -99,11 +99,13 @@ CLASS zcl_tr_transl_check DEFINITION
     "! Where a text appears, in plain words for the translator: "Message",
     "! "Selection screen field label", ... The text pool (RPT*) is split by
     "! the first character of the text key: I text symbol, S selection
-    "! text, R title, H list heading.
+    "! text, R title, H list heading. TLGS is split by the object type at
+    "! the start of its name (LXE_NAME).
     CLASS-METHODS text_kind
       IMPORTING
         lxe_type      TYPE lxeobjtype
         text_key      TYPE csequence
+        lxe_name      TYPE csequence
       RETURNING
         VALUE(result) TYPE string.
     "! True for a transport entry that carries code and no texts: LIMU
@@ -167,12 +169,15 @@ CLASS zcl_tr_transl_check DEFINITION
         VALUE(result) TYPE string.
     "! True for the SE63 object types whose texts the user sees when the
     "! product runs: messages, text elements, GUI status, screen texts,
-    "! field labels, fixed values, transactions, OTR, F1 help. False for
-    "! texts that only developers see: descriptions of classes, methods,
-    "! interfaces, function modules, tables, domains, packages.
+    "! field labels, fixed values, transactions, OTR, F1 help, and in Fiori
+    "! apps the labels of CDS views, the UI texts of metadata extensions and
+    "! the titles of launchpad tiles. False for texts that only developers
+    "! see: descriptions of classes, methods, interfaces, function modules,
+    "! tables, domains, packages, CDS views, OData services, UI5 apps.
     CLASS-METHODS is_runtime_type
       IMPORTING
         lxe_type      TYPE lxeobjtype
+        lxe_name      TYPE csequence
       RETURNING
         VALUE(result) TYPE abap_bool.
 
@@ -281,6 +286,18 @@ CLASS zcl_tr_transl_check DEFINITION
         VALUE(result) TYPE ty_objects.
 
   PRIVATE SECTION.
+    " TLGS (SE63 type of many repository objects): the object type at the
+    " start of the name, and the part of the object at its end.
+    TYPES:
+      BEGIN OF ty_logical_object,
+        object_type TYPE string,
+        part        TYPE string,
+      END OF ty_logical_object.
+    CLASS-METHODS logical_object
+      IMPORTING
+        lxe_name      TYPE csequence
+      RETURNING
+        VALUE(result) TYPE ty_logical_object.
     TYPES:
       BEGIN OF ty_language,
         r3  TYPE spras,
@@ -400,6 +417,13 @@ CLASS zcl_tr_transl_check IMPLEMENTATION.
       result = `Menu, button or title (GUI status)`.
       RETURN.
     ENDIF.
+    IF type = 'TLGS'.
+      DATA(logical) = logical_object( lxe_name ).
+      result = COND #( WHEN logical-object_type = 'UIAD' THEN `Launchpad tile (title, subtitle)`
+                       WHEN logical-object_type = 'DDLX' AND logical-part = '06' THEN `UI text of a CDS view (Fiori annotation)`
+                       ELSE |Description ({ logical-object_type })| ).
+      RETURN.
+    ENDIF.
     result = SWITCH #( type
       WHEN 'MESS' THEN `Message (status bar or popup)`
       WHEN 'DTEL' THEN `Field label (screen, table column)`
@@ -410,6 +434,9 @@ CLASS zcl_tr_transl_check IMPLEMENTATION.
       WHEN 'SOTR' OR 'LOTR' THEN `Web or UI text (OTR)`
       WHEN 'TOBJ' THEN `Title of a maintenance view (SM30)`
       WHEN 'WDYN' OR 'WD' OR 'WC' OR 'VW' THEN `Web Dynpro screen text`
+      WHEN 'DDLT' THEN `Field label of a CDS view (Fiori app)`
+      WHEN 'DDLS' THEN `Description of a CDS view`
+      WHEN 'BSP'  THEN `Description of a UI5 or BSP application`
       ELSE |Other (SE63 type { type })| ).
   ENDMETHOD.
 
@@ -532,14 +559,39 @@ CLASS zcl_tr_transl_check IMPLEMENTATION.
     "   SOTR, LOTR    OTR short and long texts
     "   TOBJ          maintenance dialogs (SM30 title)
     "   WDYN WD WC VW Web Dynpro and its configurations
+    "   DDLT          labels of the elements of a CDS view (Fiori apps)
+    "   TLGS          texts of repository objects, by the object type in the
+    "                 name: DDLX part 06 the UI texts of a metadata
+    "                 extension, UIAD the title and subtitle of a launchpad
+    "                 tile. The other parts and types are descriptions
+    "                 (DDLX 02, IWMO, IWSV, SUSC, WDCA, ...).
+    " Descriptions only: DDLS (CDS view), BSP (UI5 or BSP application; the
+    " texts of a UI5 app are its i18n files, not SE63 texts).
     CASE lxe_type.
       WHEN 'MESS' OR 'DTEL' OR 'DE' OR 'DT' OR 'VALU' OR 'TRAN' OR 'SOTR' OR 'LOTR' OR 'TOBJ' OR
-           'WDYN' OR 'WD' OR 'WC' OR 'VW'.
+           'WDYN' OR 'WD' OR 'WC' OR 'VW' OR 'DDLT'.
         result = abap_true.
+      WHEN 'TLGS'.
+        DATA(logical) = logical_object( lxe_name ).
+        result = xsdbool( logical-object_type = 'UIAD' OR
+                          ( logical-object_type = 'DDLX' AND logical-part = '06' ) ).
       WHEN OTHERS.
         result = xsdbool( strlen( lxe_type ) = 4 AND ( lxe_type CP 'RPT+' OR lxe_type CP 'SRT+' ) OR
                           strlen( lxe_type ) = 3 AND lxe_type CP 'CA+' AND lxe_type+2(1) CO '0123456789' ).
     ENDCASE.
+  ENDMETHOD.
+
+
+  METHOD logical_object.
+    " SE63 builds the name of a TLGS object from the object type (4
+    " characters), the object name (40) and the part of the object (2).
+    DATA(name) = CONV string( lxe_name ).
+    IF strlen( name ) >= 4.
+      result-object_type = substring( val = name len = 4 ).
+    ENDIF.
+    IF strlen( name ) >= 46.
+      result-part = substring( val = name off = 44 len = 2 ).
+    ENDIF.
   ENDMETHOD.
 
 
@@ -745,7 +797,7 @@ CLASS zcl_tr_transl_check IMPLEMENTATION.
     LOOP AT collection INTO DATA(part).
       " Descriptions that only developers see are not required, unless
       " asked for: development may be in English only.
-      IF all_texts = abap_false AND is_runtime_type( part-objtype ) = abap_false.
+      IF all_texts = abap_false AND is_runtime_type( lxe_type = part-objtype lxe_name = part-objname ) = abap_false.
         CONTINUE.
       ENDIF.
       DATA(source_language) = r3_language( part-orig_lang ).
@@ -766,7 +818,7 @@ CLASS zcl_tr_transl_check IMPLEMENTATION.
         IF process = 'F'.
           APPEND VALUE #( object = object-object obj_name = object-obj_name devclass = devclass
                           lxe_type = part-objtype lxe_name = part-objname
-                          text_kind = text_kind( lxe_type = part-objtype text_key = `` )
+                          text_kind = text_kind( lxe_type = part-objtype text_key = `` lxe_name = part-objname )
                           language = language-r3 source_language = source_language
                           status = status-not_readable ) TO findings.
           CONTINUE.
@@ -775,7 +827,7 @@ CLASS zcl_tr_transl_check IMPLEMENTATION.
           DATA(finding) = VALUE ty_finding(
             object = object-object obj_name = object-obj_name devclass = devclass
             lxe_type = part-objtype lxe_name = part-objname text_key = pair-textkey
-            text_kind = text_kind( lxe_type = part-objtype text_key = pair-textkey )
+            text_kind = text_kind( lxe_type = part-objtype text_key = pair-textkey lxe_name = part-objname )
             language = language-r3 source_language = source_language
             source_text = pair-s_text target_text = pair-t_text
             custmnr = part-custmnr source_iso = part-orig_lang max_length = pair-unitmlt ).

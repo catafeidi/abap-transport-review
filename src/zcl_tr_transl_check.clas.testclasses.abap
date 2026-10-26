@@ -118,6 +118,104 @@ CLASS ltc_record IMPLEMENTATION.
 ENDCLASS.
 
 
+" Which SE63 texts the user sees when the product runs. TLGS is one
+" SE63 type for many repository objects; the object type at the start of
+" its name decides.
+CLASS ltc_runtime_type DEFINITION FINAL FOR TESTING
+  RISK LEVEL HARMLESS
+  DURATION SHORT.
+
+  PUBLIC SECTION.
+    " A TLGS name as SE63 builds it: object type (4), name (40), part (2).
+    CLASS-METHODS tlgs
+      IMPORTING
+        type          TYPE csequence
+        name          TYPE csequence
+        part          TYPE csequence
+      RETURNING
+        VALUE(result) TYPE lxeobjname.
+
+  PRIVATE SECTION.
+    METHODS classic_texts_unchanged FOR TESTING.
+    METHODS cds_field_labels FOR TESTING.
+    METHODS cds_view_description_is_not FOR TESTING.
+    METHODS metadata_extension_ui_texts FOR TESTING.
+    METHODS metadata_extension_description FOR TESTING.
+    METHODS launchpad_tile_texts FOR TESTING.
+    METHODS service_descriptions_are_not FOR TESTING.
+    METHODS ui5_app_description_is_not FOR TESTING.
+ENDCLASS.
+
+
+CLASS ltc_runtime_type IMPLEMENTATION.
+
+  METHOD tlgs.
+    DATA object_name TYPE c LENGTH 40.
+
+    object_name = name.
+    result = |{ type }{ object_name WIDTH = 40 }{ part }|.
+  ENDMETHOD.
+
+
+  METHOD classic_texts_unchanged.
+    cl_abap_unit_assert=>assert_true( zcl_tr_transl_check=>is_runtime_type( lxe_type = 'MESS' lxe_name = '/MYNS/CORE' ) ).
+    cl_abap_unit_assert=>assert_true( zcl_tr_transl_check=>is_runtime_type( lxe_type = 'RPT4' lxe_name = '/MYNS/CORE' ) ).
+    cl_abap_unit_assert=>assert_false( zcl_tr_transl_check=>is_runtime_type( lxe_type = 'TABT' lxe_name = '/MYNS/CORE' ) ).
+  ENDMETHOD.
+
+
+  METHOD cds_field_labels.
+    cl_abap_unit_assert=>assert_true( zcl_tr_transl_check=>is_runtime_type( lxe_type = 'DDLT' lxe_name = 'I_COMPANYCODE' ) ).
+  ENDMETHOD.
+
+
+  METHOD cds_view_description_is_not.
+    cl_abap_unit_assert=>assert_false( zcl_tr_transl_check=>is_runtime_type( lxe_type = 'DDLS' lxe_name = 'I_COMPANYCODE' ) ).
+  ENDMETHOD.
+
+
+  METHOD metadata_extension_ui_texts.
+    cl_abap_unit_assert=>assert_true( zcl_tr_transl_check=>is_runtime_type(
+      lxe_type = 'TLGS'
+      lxe_name = tlgs( type = 'DDLX' name = 'CDR_C_DETAILS_U' part = '06' ) ) ).
+  ENDMETHOD.
+
+
+  METHOD metadata_extension_description.
+    cl_abap_unit_assert=>assert_false( zcl_tr_transl_check=>is_runtime_type(
+      lxe_type = 'TLGS'
+      lxe_name = tlgs( type = 'DDLX' name = 'CDR_C_DETAILS_U' part = '02' ) ) ).
+  ENDMETHOD.
+
+
+  METHOD launchpad_tile_texts.
+    cl_abap_unit_assert=>assert_true( zcl_tr_transl_check=>is_runtime_type(
+      lxe_type = 'TLGS'
+      lxe_name = tlgs( type = 'UIAD' name = '/ACCGO/GFFEEDDDCCBBBA94' part = '02' ) ) ).
+    cl_abap_unit_assert=>assert_true( zcl_tr_transl_check=>is_runtime_type(
+      lxe_type = 'TLGS'
+      lxe_name = tlgs( type = 'UIAD' name = '/ACCGO/GFFEEDDDCCBBBA94' part = '04' ) ) ).
+  ENDMETHOD.
+
+
+  METHOD service_descriptions_are_not.
+    cl_abap_unit_assert=>assert_false( zcl_tr_transl_check=>is_runtime_type(
+      lxe_type = 'TLGS'
+      lxe_name = tlgs( type = 'IWSV' name = '/ACI/ASSET_CENTRAL_CHANGE_NOTIF    0001' part = '02' ) ) ).
+    cl_abap_unit_assert=>assert_false( zcl_tr_transl_check=>is_runtime_type(
+      lxe_type = 'TLGS'
+      lxe_name = tlgs( type = 'SUSC' name = '/AGG' part = '02' ) ) ).
+    cl_abap_unit_assert=>assert_false( zcl_tr_transl_check=>is_runtime_type( lxe_type = 'TLGS' lxe_name = 'UI' ) ).
+  ENDMETHOD.
+
+
+  METHOD ui5_app_description_is_not.
+    cl_abap_unit_assert=>assert_false( zcl_tr_transl_check=>is_runtime_type( lxe_type = 'BSP' lxe_name = 'ZAPP' ) ).
+  ENDMETHOD.
+
+ENDCLASS.
+
+
 " The kind of text shown to the translator instead of the SE63 type.
 CLASS ltc_text_kind DEFINITION FINAL FOR TESTING
   RISK LEVEL HARMLESS
@@ -127,6 +225,7 @@ CLASS ltc_text_kind DEFINITION FINAL FOR TESTING
     METHODS text_pool_is_split_by_key FOR TESTING.
     METHODS types_in_plain_words FOR TESTING.
     METHODS unknown_type_names_it FOR TESTING.
+    METHODS fiori_texts_in_plain_words FOR TESTING.
 ENDCLASS.
 
 
@@ -134,37 +233,59 @@ CLASS ltc_text_kind IMPLEMENTATION.
 
   METHOD text_pool_is_split_by_key.
     cl_abap_unit_assert=>assert_equals(
-      act = zcl_tr_transl_check=>text_kind( lxe_type = 'RPT4' text_key = 'SP_FILE' )
+      act = zcl_tr_transl_check=>text_kind( lxe_type = 'RPT4' text_key = 'SP_FILE' lxe_name = '' )
       exp = `Selection screen field label` ).
     cl_abap_unit_assert=>assert_equals(
-      act = zcl_tr_transl_check=>text_kind( lxe_type = 'RPT1' text_key = 'I001' )
+      act = zcl_tr_transl_check=>text_kind( lxe_type = 'RPT1' text_key = 'I001' lxe_name = '' )
       exp = `Text in a program (text symbol)` ).
     cl_abap_unit_assert=>assert_equals(
-      act = zcl_tr_transl_check=>text_kind( lxe_type = 'RPT8' text_key = '' )
+      act = zcl_tr_transl_check=>text_kind( lxe_type = 'RPT8' text_key = '' lxe_name = '' )
       exp = `Text element of a program` ).
   ENDMETHOD.
 
 
   METHOD types_in_plain_words.
     cl_abap_unit_assert=>assert_equals(
-      act = zcl_tr_transl_check=>text_kind( lxe_type = 'MESS' text_key = 'TEXT' )
+      act = zcl_tr_transl_check=>text_kind( lxe_type = 'MESS' text_key = 'TEXT' lxe_name = '' )
       exp = `Message (status bar or popup)` ).
     cl_abap_unit_assert=>assert_equals(
-      act = zcl_tr_transl_check=>text_kind( lxe_type = 'CA1' text_key = '' )
+      act = zcl_tr_transl_check=>text_kind( lxe_type = 'CA1' text_key = '' lxe_name = '' )
       exp = `Menu, button or title (GUI status)` ).
     cl_abap_unit_assert=>assert_equals(
-      act = zcl_tr_transl_check=>text_kind( lxe_type = 'SRT4' text_key = '' )
+      act = zcl_tr_transl_check=>text_kind( lxe_type = 'SRT4' text_key = '' lxe_name = '' )
       exp = `Screen text (label, frame, button)` ).
     cl_abap_unit_assert=>assert_equals(
-      act = zcl_tr_transl_check=>text_kind( lxe_type = 'VALU' text_key = '' )
+      act = zcl_tr_transl_check=>text_kind( lxe_type = 'VALU' text_key = '' lxe_name = '' )
       exp = `Value in a dropdown list` ).
   ENDMETHOD.
 
 
   METHOD unknown_type_names_it.
     cl_abap_unit_assert=>assert_equals(
-      act = zcl_tr_transl_check=>text_kind( lxe_type = 'XYZ1' text_key = '' )
+      act = zcl_tr_transl_check=>text_kind( lxe_type = 'XYZ1' text_key = '' lxe_name = '' )
       exp = `Other (SE63 type XYZ1)` ).
+  ENDMETHOD.
+
+
+  METHOD fiori_texts_in_plain_words.
+    cl_abap_unit_assert=>assert_equals(
+      act = zcl_tr_transl_check=>text_kind( lxe_type = 'DDLT' text_key = '' lxe_name = 'I_COMPANYCODE' )
+      exp = `Field label of a CDS view (Fiori app)` ).
+    cl_abap_unit_assert=>assert_equals(
+      act = zcl_tr_transl_check=>text_kind( lxe_type = 'TLGS' text_key = '' lxe_name = ltc_runtime_type=>tlgs( type = 'DDLX'
+                                                                                                         name = 'C_DETAILS'
+                                                                                                         part = '06' ) )
+      exp = `UI text of a CDS view (Fiori annotation)` ).
+    cl_abap_unit_assert=>assert_equals(
+      act = zcl_tr_transl_check=>text_kind( lxe_type = 'TLGS' text_key = '' lxe_name = ltc_runtime_type=>tlgs( type = 'UIAD'
+                                                                                                         name = 'ZAPP_TILE'
+                                                                                                         part = '02' ) )
+      exp = `Launchpad tile (title, subtitle)` ).
+    cl_abap_unit_assert=>assert_equals(
+      act = zcl_tr_transl_check=>text_kind( lxe_type = 'TLGS' text_key = '' lxe_name = ltc_runtime_type=>tlgs( type = 'IWSV'
+                                                                                                         name = 'ZSERVICE 0001'
+                                                                                                         part = '02' ) )
+      exp = `Description (IWSV)` ).
   ENDMETHOD.
 
 ENDCLASS.
