@@ -42,19 +42,19 @@ METHOD if_ex_cts_request_check~check_before_release.
 *                          = BLOCK  -> the release is refused while a
 *                                      text is missing
 *
-* On the screen the developer can choose "Translate now": report
+* On the screen the developer can choose "Translate": report
 * ZTR_TRANSL_REPORT opens the editable list of the missing texts of the
 * task or request being released. The translations are typed into the
 * list, or downloaded and uploaded as an Excel file with the buttons of
 * its toolbar (the upload also at the next release).
 * Save writes the translations as SE63 does and records them in the task
-* or request being released. After "Translate now" this release always
+* or request being released. After "Translate" this release always
 * stops: it works on the object list read before Save, so it would not
 * carry the translations just recorded. The developer releases again;
 * with everything translated the check passes.
 *
 * Texts of UI5 apps (i18n files, ZCL_TR_TRANSL_UI5) count like the other
-* texts, but "Translate now" cannot translate them: they are translated
+* texts, but "Translate" cannot translate them: they are translated
 * in the i18n files of the app or in SE63 for the app. When only they
 * are missing, the release shows the message without the list.
 *
@@ -73,7 +73,7 @@ METHOD if_ex_cts_request_check~check_before_release.
 *
 * Delivery to customers: a request whose short text contains #DELIVERY
 * (its tasks follow it) is refused while a text is missing, whatever the
-* mode, with an error message and no "Translate now": translations are
+* mode, with an error message and no "Translate": translations are
 * made in the development requests, never in a delivery. Nothing is
 * recorded in it. A transport of copies with #DELIVERY is checked too.
 *
@@ -180,7 +180,7 @@ METHOD if_ex_cts_request_check~check_before_release.
     RETURN.
   ENDIF.
   " Texts of UI5 apps are translated in the i18n files of the app or in
-  " SE63 for the app, not in the editable list: "Translate now" only
+  " SE63 for the app, not in the editable list: "Translate" only
   " helps with the others.
   DATA(ui5_missing) = REDUCE i( INIT count = 0
                                 FOR ui5 IN findings WHERE ( status    = zcl_tr_transl_check=>status-missing AND
@@ -230,10 +230,13 @@ METHOD if_ex_cts_request_check~check_before_release.
         text_question         = |{ part_1 }{ part_2 }{ part_3 } Translate them now: in the list, | &&
                                 |or download them as an Excel file and upload it at the next release. | &&
                                 |Save writes them and records them in { request }; then release again.|
-        text_button_1         = 'Translate now'
+        " The popup shows at most 12 characters per button: the icons carry the rest.
+        text_button_1         = 'Translate'
         icon_button_1         = 'ICON_CHANGE_TEXT'
-        text_button_2         = COND string( WHEN mode = zcl_tr_transl_check=>mode-inform THEN `Release anyway`
-                                             ELSE `Cancel release` )
+        text_button_2         = COND string( WHEN mode = zcl_tr_transl_check=>mode-inform THEN `Release`
+                                             ELSE `Cancel` )
+        icon_button_2         = COND icon-name( WHEN mode = zcl_tr_transl_check=>mode-inform THEN 'ICON_RELEASE'
+                                                ELSE 'ICON_CANCEL' )
         default_button        = '1'
         display_cancel_button = abap_false
       IMPORTING

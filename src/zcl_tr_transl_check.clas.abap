@@ -83,7 +83,7 @@ CLASS zcl_tr_transl_check DEFINITION
     " In the short text of a request: release it without the check.
     CONSTANTS skip_marker TYPE string VALUE `#NOTRANSL`.
     " In the short text of a request: a delivery to customers. A missing
-    " translation always refuses its release, without "Translate now".
+    " translation always refuses its release, without "Translate".
     CONSTANTS delivery_marker TYPE string VALUE `#DELIVERY`.
     CONSTANTS report_name TYPE progname VALUE 'ZTR_TRANSL_REPORT'.
 

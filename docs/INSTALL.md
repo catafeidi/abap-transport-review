@@ -178,7 +178,7 @@ Use a test package under Git and a test request.
 8. **Request too early:** release the request before the approval. Expected: refused, "pull request `<n>` is not approved yet".
 9. **Approve:** a colleague approves the pull request on GitHub. Do not merge it.
 10. **Release the request.** Expected: released; SM37 shows job `GIT_MERGE_<request>` with "pull request `<n>` squashed and merged"; on GitHub the pull request is merged and the review branch is gone.
-11. **Translation check** (only if set up): change a text of a test object in one required language only, release the task. Expected in mode `INFORM`: a popup in SAP GUI that names the text, "Translate now" opens `ZTR_TRANSL_REPORT`; the pull request description has a section "Missing translations". In mode `BLOCK` the release is refused until the text is translated.
+11. **Translation check** (only if set up): change a text of a test object in one required language only, release the task. Expected in mode `INFORM`: a popup in SAP GUI that names the text, "Translate" opens `ZTR_TRANSL_REPORT`; the pull request description has a section "Missing translations". In mode `BLOCK` the release is refused until the text is translated.
 
 If something fails, [WORKFLOW.md](WORKFLOW.md) lists the results of the release check and README has a troubleshooting table.
 

@@ -15,7 +15,7 @@ The examples use German (`D`) and English (`E`) as the required languages; any o
 
 Both end the same way: **Save** writes the translations exactly as SE63 does and records them in your request, so that they are transported. Nothing is written before Save.
 
-A third way finds you by itself: when you release a task with missing texts, the release check offers "Translate now", which opens the editable list of exactly that task, with the buttons of way B in its toolbar.
+A third way finds you by itself: when you release a task with missing texts, the release check offers "Translate", which opens the editable list of exactly that task, with the buttons of way B in its toolbar.
 
 ## Before you start
 
@@ -160,15 +160,15 @@ The column *Kind of text* says where a text appears, so that it can be worded fo
 
 ## Way C: at release
 
-When the check at release is switched on (mode INFORM or BLOCK) and you release a task with missing texts, a popup names them and offers **Translate now**. It opens the editable list of the missing texts of what you release; Save records the translations in it. Then:
+When the check at release is switched on (mode INFORM or BLOCK) and you release a task with missing texts, a popup names them and offers **Translate**. It opens the editable list of the missing texts of what you release; Save records the translations in it. Then:
 
 - **In the list:** translate, Save, leave the list (Back). The release stops with "translations saved. Release ... again": release again, and the check passes.
 - **With an Excel or CSV file** (many texts, a translation tool, or AI):
   1. **Download Excel** (or **Download CSV**) in the toolbar of the list, save the file. Back: the release is refused in mode BLOCK (in INFORM it goes on), because the texts are still missing.
   2. Fill the file as in way B.
-  3. Release again, **Translate now**, **Upload file** and the file. Check the list, Save, Back. Release once more: nothing is missing any more, and the release goes through.
+  3. Release again, **Translate**, **Upload file** and the file. Check the list, Save, Back. Release once more: nothing is missing any more, and the release goes through.
 
-After "Translate now" the release always stops, also when you leave the list without Save; release again when you are ready. The release that comes back from the list cannot go on, because it would not carry the translations just saved. Details: [TRANSLATION-CHECK.md](TRANSLATION-CHECK.md), "At release".
+After "Translate" the release always stops, also when you leave the list without Save; release again when you are ready. The release that comes back from the list cannot go on, because it would not carry the translations just saved. Details: [TRANSLATION-CHECK.md](TRANSLATION-CHECK.md), "At release".
 
 ## Hardcoded texts, table entries and UI5 apps
 

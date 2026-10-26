@@ -48,7 +48,7 @@ What the release does:
 | Check or step | What it expects | When it refuses |
 |---|---|---|
 | GitHub login (`ZTR_RELEASE_CHECK`) | you are logged in | not logged in: run the login report |
-| Translation check (`ZTR_TRANSL_CHECK`) | the texts of your objects exist in the required languages | mode BLOCK and a text missing. The popup offers "Translate now" |
+| Translation check (`ZTR_TRANSL_CHECK`) | the texts of your objects exist in the required languages | mode BLOCK and a text missing. The popup offers "Translate" |
 | Object check, ATC | no findings of priority 1 and 2 | when ATC is set to block ([ATC-AT-RELEASE.md](ATC-AT-RELEASE.md)) |
 | Push to Git | — | never refuses; job `GIT_REVIEW_<request>` pushes to `review/<request>` and opens the pull request in your name |
 
@@ -83,7 +83,7 @@ Then job `GIT_MERGE_<request>` squashes and merges the pull request into the bas
 A transport that goes to a customer (a hotfix as a transport of copies, a correction transport, a delivery request) is built **from released, reviewed and merged work only**. Who builds it and on which system is your delivery process. The request itself follows these rules:
 
 1. **Short text** with the issue key and `#DELIVERY`, for example `ABC-123 Hotfix 3 #DELIVERY`.
-2. **Never change or translate in it.** It only collects what is ready. If a text is missing, its release is refused with an error message (whatever the mode, also for a transport of copies) and **no** "Translate now" is offered: translate in a development request, release that one, then rebuild the delivery.
+2. **Never change or translate in it.** It only collects what is ready. If a text is missing, its release is refused with an error message (whatever the mode, also for a transport of copies) and **no** "Translate" is offered: translate in a development request, release that one, then rebuild the delivery.
 3. **Tag the commit** on the base branch that the delivery was built from, with the request number in the tag message, so that a later fix can start from exactly what the customer has.
 
 ## Markers in the short text
@@ -92,7 +92,7 @@ Each tool reads only its own marker. Markers can be combined; put them at the en
 
 | Marker | Read by | Effect | Use for |
 |---|---|---|---|
-| `#DELIVERY` | translation check | a missing translation always refuses the release, without "Translate now"; nothing is recorded into it; a transport of copies is checked too | every transport that goes to a customer |
+| `#DELIVERY` | translation check | a missing translation always refuses the release, without "Translate"; nothing is recorded into it; a transport of copies is checked too | every transport that goes to a customer |
 | `#NOREVIEW` | Git workflow | the request is released without the review check and is not merged; the pull request stays open for an admin | emergencies only |
 | `#NOTRANSL` | translation check | the request and its tasks are released without the translation check; wins over `#DELIVERY` | emergencies only |
 
@@ -110,7 +110,7 @@ A fix made on a separate hotfix system comes back into development **through Git
 | `pull request <number> is not approved yet` | get the review, then release the request |
 | `<x>` is also in `<y>` ... Both requests wait for each other | SE09, Merge Requests: `<y>` into your request, then release again |
 | the pull request is behind the base branch | "Update branch" on GitHub, then release again |
-| `<request>: N text(s) without translation ...` | "Translate now", or `ZTR_TRANSL_REPORT` with your task |
+| `<request>: N text(s) without translation ...` | "Translate", or `ZTR_TRANSL_REPORT` with your task |
 | `... Delivery: translate in the development requests.` | the delivery is missing a translation: translate in a development request, release it, rebuild the delivery |
 | another push is running | wait a minute, release again |
 | release in the background refused | SM37, job `RELEASE OF <request>`: the reason is in the last line of its log |

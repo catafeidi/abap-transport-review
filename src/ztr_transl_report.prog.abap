@@ -72,7 +72,7 @@
 *& developer changes the objects.
 *&
 *& The release check calls this report with "Enter translations" when the
-*& developer chooses "Translate now": the editable list opens at once.
+*& developer chooses "Translate": the editable list opens at once.
 *& ABAP 7.40 syntax.
 *&---------------------------------------------------------------------*
 REPORT ztr_transl_report.
