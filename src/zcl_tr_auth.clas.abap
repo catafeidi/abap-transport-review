@@ -23,8 +23,14 @@
 * Nothing is shared between users. A user without a token cannot push
 * and cannot release a task or a request with objects of the packages under Git.
 *
+* With "Expire user authorization tokens" switched on in the GitHub App,
+* a token lives 8 hours and comes with a refresh token (6 months). The
+* class then renews the token by itself before it expires, so a copied
+* token dies within hours. Refresh tokens work once only, so the renewal
+* runs under a lock per user. Without expiry nothing is renewed.
+*
 * Setup, see GITHUB-LOGIN.md: GitHub App with device flow enabled and
-* user tokens that do not expire; its client ID in STVARV as
+* expiring user tokens; its client ID in STVARV as
 * ZTR_CLIENT_ID (parameter). Optional STVARV parameter
 * ZTR_PACKAGES: the package pattern of the system, for example
 * /MYNS/* on another system; without it Z*.
@@ -48,10 +54,15 @@ CLASS zcl_tr_auth DEFINITION
         interval         TYPE i,
       END OF ty_device_code.
     TYPES:
-      BEGIN OF ty_poll,
-        token TYPE string,
-        error TYPE string,   " authorization_pending, slow_down, expired_token, access_denied
-      END OF ty_poll.
+      BEGIN OF ty_tokens,
+        token         TYPE string,
+        refresh_token TYPE string,   " empty when the GitHub App's tokens do not expire
+        expires_in    TYPE i,        " seconds, 0 = does not expire
+      END OF ty_tokens.
+    TYPES BEGIN OF ty_poll.
+    INCLUDE TYPE ty_tokens.
+    TYPES error TYPE string.   " authorization_pending, slow_down, expired_token, access_denied
+    TYPES END OF ty_poll.
 
     CONSTANTS login_report      TYPE progname VALUE 'ZTR_GITHUB_LOGIN'.
     " The packages of this system that are under Git: the pattern from
@@ -113,8 +124,8 @@ CLASS zcl_tr_auth DEFINITION
         zcx_abapgit_exception.
     CLASS-METHODS store
       IMPORTING
-        token TYPE string
-        login TYPE string
+        tokens TYPE ty_tokens
+        login  TYPE string
       RAISING
         zcx_abapgit_exception.
     CLASS-METHODS remove
@@ -216,6 +227,13 @@ CLASS zcl_tr_auth DEFINITION
         login TYPE string,
         token TYPE xstring,   " AES-256 encrypted
       END OF ty_record.
+    " Kept as a second parameter next to the record in the same cluster
+    " row, so rows stored before this existed are still read.
+    TYPES:
+      BEGIN OF ty_refresh,
+        token      TYPE xstring,     " AES-256 encrypted
+        expires_at TYPE timestampl,  " of the access token, UTC; initial = does not expire
+      END OF ty_refresh.
 
     CONSTANTS area             TYPE indx-relid VALUE 'ZT'.
     CONSTANTS key_id           TYPE indx-srtfd VALUE 'KEY:SYSTEM'.
@@ -228,9 +246,15 @@ CLASS zcl_tr_auth DEFINITION
     CONSTANTS device_code_path TYPE string VALUE '/login/device/code'.
     CONSTANTS token_path       TYPE string VALUE '/login/oauth/access_token'.
     CONSTANTS device_grant     TYPE string VALUE 'urn:ietf:params:oauth:grant-type:device_code'.
+    CONSTANTS refresh_grant    TYPE string VALUE 'refresh_token'.
     CONSTANTS git_user         TYPE string VALUE 'x-access-token'.
 
     CONSTANTS extra_seconds    TYPE i VALUE 5.
+    " Renew this long before the token expires, so that a push started
+    " just before does not run into the end.
+    CONSTANTS refresh_margin   TYPE i VALUE 300.
+    CONSTANTS lock_table       TYPE tabname VALUE 'INDX'.
+    CONSTANTS lock_exclusive   TYPE enqmode VALUE 'E'.
 
     CLASS-METHODS show_code
       IMPORTING
@@ -241,7 +265,7 @@ CLASS zcl_tr_auth DEFINITION
       IMPORTING
         device        TYPE ty_device_code
       RETURNING
-        VALUE(result) TYPE string
+        VALUE(result) TYPE ty_tokens
       RAISING
         zcx_abapgit_exception.
     " The token of the user who runs this, decrypted, empty when there is none. Nobody can ask for
@@ -259,6 +283,67 @@ CLASS zcl_tr_auth DEFINITION
     CLASS-METHODS read_record
       RETURNING
         VALUE(result) TYPE ty_record.
+    CLASS-METHODS read_refresh
+      RETURNING
+        VALUE(result) TYPE ty_refresh.
+    " The answer of GitHub's token endpoint, for the device flow and for the refresh alike.
+    CLASS-METHODS tokens_from_response
+      IMPORTING
+        response      TYPE string
+      RETURNING
+        VALUE(result) TYPE ty_poll
+      RAISING
+        zcx_abapgit_exception.
+    CLASS-METHODS needs_refresh
+      IMPORTING
+        expires_at    TYPE timestampl
+        now           TYPE timestampl
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+    CLASS-METHODS expiry_time
+      IMPORTING
+        expires_in    TYPE i
+      RETURNING
+        VALUE(result) TYPE timestampl.
+    " The renewed token, or empty when GitHub refuses the refresh token or cannot be reached.
+    CLASS-METHODS refreshed_token
+      RETURNING
+        VALUE(result) TYPE string.
+    CLASS-METHODS refresh_if_still_needed
+      RETURNING
+        VALUE(result) TYPE string
+      RAISING
+        zcx_abapgit_exception
+        cx_sec_sxml_encrypt_error.
+    CLASS-METHODS request_refresh
+      IMPORTING
+        refresh_token TYPE string
+      RETURNING
+        VALUE(result) TYPE ty_poll
+      RAISING
+        zcx_abapgit_exception.
+    CLASS-METHODS lock
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+    CLASS-METHODS unlock.
+    CLASS-METHODS lock_key
+      RETURNING
+        VALUE(result) TYPE rstable-varkey.
+    CLASS-METHODS encrypt
+      IMPORTING
+        plaintext     TYPE string
+      RETURNING
+        VALUE(result) TYPE xstring
+      RAISING
+        zcx_abapgit_exception.
+    CLASS-METHODS decrypt
+      IMPORTING
+        ciphertext    TYPE xstring
+      RETURNING
+        VALUE(result) TYPE string
+      RAISING
+        zcx_abapgit_exception
+        cx_sec_sxml_encrypt_error.
     CLASS-METHODS event_secret
       RETURNING
         VALUE(result) TYPE xstring
@@ -519,11 +604,11 @@ CLASS ZCL_TR_AUTH IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    DATA(token) = wait_for_token( device ).
+    DATA(tokens) = wait_for_token( device ).
 
     " Prove the token before keeping it, and learn the account name.
-    result = login_of_token( token ).
-    store( token = token login = result ).
+    result = login_of_token( tokens-token ).
+    store( tokens = tokens login = result ).
   ENDMETHOD.
 
 
@@ -564,13 +649,22 @@ CLASS ZCL_TR_AUTH IMPLEMENTATION.
       zcx_abapgit_exception=>raise( |GitHub responds with HTTP { status } while waiting for the login| ).
     ENDIF.
 
+    result = tokens_from_response( response ).
+  ENDMETHOD.
+
+
+  METHOD tokens_from_response.
     result-error = json_value( json = response path = '/error' ).
-    IF result-error IS INITIAL.
-      result-token = json_value( json = response path = '/access_token' ).
-      IF result-token IS INITIAL.
-        zcx_abapgit_exception=>raise( |GitHub sent no token: { response }| ).
-      ENDIF.
+    IF result-error IS NOT INITIAL.
+      RETURN.
     ENDIF.
+
+    result-token = json_value( json = response path = '/access_token' ).
+    IF result-token IS INITIAL.
+      zcx_abapgit_exception=>raise( 'GitHub sent no token' ).
+    ENDIF.
+    result-refresh_token = json_value( json = response path = '/refresh_token' ).
+    result-expires_in    = json_value( json = response path = '/expires_in' ).
   ENDMETHOD.
 
 
@@ -582,6 +676,170 @@ CLASS ZCL_TR_AUTH IMPLEMENTATION.
     IF sy-subrc <> 0.
       CLEAR result.
     ENDIF.
+  ENDMETHOD.
+
+
+  METHOD read_refresh.
+    DATA id TYPE indx-srtfd.
+
+    " Rows stored before the refresh existed have no such parameter; IMPORT then leaves it initial.
+    id = token_id( ).
+    IMPORT refresh = result FROM DATABASE indx(zt) ID id.
+    IF sy-subrc <> 0.
+      CLEAR result.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD needs_refresh.
+    IF expires_at IS INITIAL.
+      RETURN.
+    ENDIF.
+    result = xsdbool( cl_abap_tstmp=>subtract( tstmp1 = expires_at
+                                               tstmp2 = now ) < refresh_margin ).
+  ENDMETHOD.
+
+
+  METHOD expiry_time.
+    DATA now TYPE timestampl.
+
+    IF expires_in <= 0.
+      RETURN.
+    ENDIF.
+    GET TIME STAMP FIELD now.
+    result = cl_abap_tstmp=>add( tstmp = now
+                                 secs  = expires_in ).
+  ENDMETHOD.
+
+
+  METHOD refreshed_token.
+    " A refresh token works once. Two jobs of the same user that renew at
+    " the same moment would make GitHub refuse the second one, so the
+    " renewal runs under a lock.
+    IF lock( ) = abap_false.
+      RETURN.
+    ENDIF.
+
+    TRY.
+        result = refresh_if_still_needed( ).
+      CATCH zcx_abapgit_exception cx_sec_sxml_encrypt_error.
+        " GitHub not reachable or the stored data not readable: no token,
+        " the caller asks to log in again.
+        CLEAR result.
+    ENDTRY.
+
+    unlock( ).
+  ENDMETHOD.
+
+
+  METHOD refresh_if_still_needed.
+    DATA now TYPE timestampl.
+
+    " Another job may have renewed the token while this one waited for the lock.
+    DATA(record)  = read_record( ).
+    DATA(refresh) = read_refresh( ).
+    GET TIME STAMP FIELD now.
+    IF needs_refresh( expires_at = refresh-expires_at now = now ) = abap_false.
+      result = decrypt( record-token ).
+      RETURN.
+    ENDIF.
+
+    DATA(tokens) = request_refresh( decrypt( refresh-token ) ).
+    IF tokens-error IS NOT INITIAL.
+      " Refresh token revoked or older than 6 months: only a new login helps.
+      remove( ).
+      RETURN.
+    ENDIF.
+
+    " Kept in the current LUW like every other store. Should the caller roll
+    " back, GitHub has already replaced the refresh token and the next use
+    " asks for a new login.
+    store( tokens = CORRESPONDING #( tokens ) login = record-login ).
+    result = tokens-token.
+  ENDMETHOD.
+
+
+  METHOD request_refresh.
+    DATA status   TYPE i.
+    DATA response TYPE string.
+
+    " Tokens from the device flow are renewed without the client secret of the App.
+    call(
+      EXPORTING
+        url      = |{ github }{ token_path }|
+        method   = 'POST'
+        body     = |client_id={ client_id( ) }&grant_type={ refresh_grant }| &&
+                   |&refresh_token={ cl_http_utility=>escape_url( refresh_token ) }|
+      IMPORTING
+        status   = status
+        response = response ).
+    IF status <> 200.
+      zcx_abapgit_exception=>raise( |GitHub responds with HTTP { status } to the token renewal| ).
+    ENDIF.
+
+    result = tokens_from_response( response ).
+  ENDMETHOD.
+
+
+  METHOD lock.
+    DATA(key) = lock_key( ).
+
+    CALL FUNCTION 'ENQUEUE_E_TABLE'
+      EXPORTING
+        mode_rstable   = lock_exclusive
+        tabname        = lock_table
+        varkey         = key
+        _wait          = abap_true
+      EXCEPTIONS
+        foreign_lock   = 1
+        system_failure = 2
+        OTHERS         = 3.
+    result = xsdbool( sy-subrc = 0 ).
+  ENDMETHOD.
+
+
+  METHOD unlock.
+    DATA(key) = lock_key( ).
+
+    CALL FUNCTION 'DEQUEUE_E_TABLE'
+      EXPORTING
+        mode_rstable = lock_exclusive
+        tabname      = lock_table
+        varkey       = key.
+  ENDMETHOD.
+
+
+  METHOD lock_key.
+    result = |{ sy-mandt }{ area }{ token_id( ) }|.
+  ENDMETHOD.
+
+
+  METHOD encrypt.
+    TRY.
+        cl_sec_sxml_writer=>encrypt(
+          EXPORTING
+            plaintext  = cl_abap_codepage=>convert_to( plaintext )
+            key        = encryption_key( )
+            algorithm  = cl_sec_sxml_writer=>co_aes256_algorithm_pem
+          IMPORTING
+            ciphertext = result ).
+      CATCH cx_sec_sxml_encrypt_error INTO DATA(error).
+        zcx_abapgit_exception=>raise( |the token could not be encrypted: { error->get_text( ) }| ).
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD decrypt.
+    DATA plaintext TYPE xstring.
+
+    cl_sec_sxml_writer=>decrypt(
+      EXPORTING
+        ciphertext = ciphertext
+        key        = encryption_key( )
+        algorithm  = cl_sec_sxml_writer=>co_aes256_algorithm_pem
+      IMPORTING
+        plaintext  = plaintext ).
+    result = cl_abap_codepage=>convert_from( plaintext ).
   ENDMETHOD.
 
 
@@ -795,26 +1053,21 @@ CLASS ZCL_TR_AUTH IMPLEMENTATION.
 
 
   METHOD store.
-    DATA record TYPE ty_record.
-    DATA header TYPE indx.
+    DATA record  TYPE ty_record.
+    DATA refresh TYPE ty_refresh.
+    DATA header  TYPE indx.
 
-    TRY.
-        cl_sec_sxml_writer=>encrypt(
-          EXPORTING
-            plaintext  = cl_abap_codepage=>convert_to( token )
-            key        = encryption_key( )
-            algorithm  = cl_sec_sxml_writer=>co_aes256_algorithm_pem
-          IMPORTING
-            ciphertext = record-token ).
-      CATCH cx_sec_sxml_encrypt_error INTO DATA(error).
-        zcx_abapgit_exception=>raise( |the token could not be encrypted: { error->get_text( ) }| ).
-    ENDTRY.
+    record-token = encrypt( tokens-token ).
     record-login = login.
+    IF tokens-refresh_token IS NOT INITIAL.
+      refresh-token      = encrypt( tokens-refresh_token ).
+      refresh-expires_at = expiry_time( tokens-expires_in ).
+    ENDIF.
 
     header-aedat = sy-datum.
     header-usera = sy-uname.
     DATA(id) = token_id( ).
-    EXPORT record = record TO DATABASE indx(zt) FROM header ID id.
+    EXPORT record = record refresh = refresh TO DATABASE indx(zt) FROM header ID id.
     IF sy-subrc <> 0.
       zcx_abapgit_exception=>raise( |the token could not be stored (INDX { area })| ).
     ENDIF.
@@ -822,22 +1075,23 @@ CLASS ZCL_TR_AUTH IMPLEMENTATION.
 
 
   METHOD token.
-    DATA plaintext TYPE xstring.
+    DATA now TYPE timestampl.
 
     DATA(record) = read_record( ).
     IF record-token IS INITIAL.
       RETURN.
     ENDIF.
 
+    DATA(refresh) = read_refresh( ).
+    GET TIME STAMP FIELD now.
+    IF refresh-token IS NOT INITIAL
+        AND needs_refresh( expires_at = refresh-expires_at now = now ) = abap_true.
+      result = refreshed_token( ).
+      RETURN.
+    ENDIF.
+
     TRY.
-        cl_sec_sxml_writer=>decrypt(
-          EXPORTING
-            ciphertext = record-token
-            key        = encryption_key( )
-            algorithm  = cl_sec_sxml_writer=>co_aes256_algorithm_pem
-          IMPORTING
-            plaintext  = plaintext ).
-        result = cl_abap_codepage=>convert_from( plaintext ).
+        result = decrypt( record-token ).
       CATCH cx_sec_sxml_encrypt_error zcx_abapgit_exception.
         " A token that cannot be read is no token: log in again.
         CLEAR result.
@@ -861,7 +1115,7 @@ CLASS ZCL_TR_AUTH IMPLEMENTATION.
       DATA(poll) = poll_for_token( device-device_code ).
       CASE poll-error.
         WHEN ''.
-          result = poll-token.
+          result = CORRESPONDING #( poll ).
           RETURN.
         WHEN poll_error-pending.
           CONTINUE.

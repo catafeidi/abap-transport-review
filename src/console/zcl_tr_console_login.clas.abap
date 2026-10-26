@@ -91,8 +91,8 @@ CLASS zcl_tr_console_login IMPLEMENTATION.
     CASE poll-error.
       WHEN ''.
         DATA(account) = zcl_tr_auth=>login_of_token( poll-token ).
-        zcl_tr_auth=>store( token = poll-token
-                            login = account ).
+        zcl_tr_auth=>store( tokens = CORRESPONDING #( poll )
+                            login  = account ).
         zcl_tr_auth=>forget_device_code( ).
         add( |Logged in to GitHub as { account }. Pushes and pull requests of { sy-uname } now run under this account.| ).
         DATA(missing) = zcl_tr_auth=>repositories_without_access( ).

@@ -1,3 +1,6 @@
+CLASS ltc_tokens DEFINITION DEFERRED.
+CLASS zcl_tr_auth DEFINITION LOCAL FRIENDS ltc_tokens.
+
 " Tests of the code of a login that is kept between two runs (the ADT console). They write to the
 " cluster table INDX, to the row of the user who runs them only (id PEND:<user>), and remove it again.
 " That is why the risk level is DANGEROUS: run them on a development system.
@@ -162,6 +165,109 @@ CLASS ltc_github_url IMPLEMENTATION.
 
   METHOD empty_url.
     cl_abap_unit_assert=>assert_false( is_github_url( `` ) ).
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+" Token renewal: when a token is renewed, and what the token endpoint of GitHub answers.
+CLASS ltc_tokens DEFINITION FINAL FOR TESTING
+  DURATION SHORT
+  RISK LEVEL HARMLESS.
+
+  PRIVATE SECTION.
+    CONSTANTS now TYPE timestampl VALUE '20261026120000'.
+
+    METHODS no_expiry_never_renews FOR TESTING.
+    METHODS far_from_expiry FOR TESTING.
+    METHODS just_outside_the_margin FOR TESTING.
+    METHODS inside_the_margin FOR TESTING.
+    METHODS already_expired FOR TESTING.
+    METHODS expiring_token_answer FOR TESTING RAISING zcx_abapgit_exception.
+    METHODS non_expiring_token_answer FOR TESTING RAISING zcx_abapgit_exception.
+    METHODS refused_refresh_token FOR TESTING RAISING zcx_abapgit_exception.
+    METHODS answer_without_token FOR TESTING.
+
+    METHODS needs_refresh
+      IMPORTING
+        expires_at    TYPE timestampl
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+ENDCLASS.
+
+
+CLASS ltc_tokens IMPLEMENTATION.
+
+  METHOD needs_refresh.
+    result = zcl_tr_auth=>needs_refresh( expires_at = expires_at now = now ).
+  ENDMETHOD.
+
+
+  METHOD no_expiry_never_renews.
+    cl_abap_unit_assert=>assert_false( needs_refresh( VALUE #( ) ) ).
+  ENDMETHOD.
+
+
+  METHOD far_from_expiry.
+    cl_abap_unit_assert=>assert_false( needs_refresh( '20261026200000' ) ).
+  ENDMETHOD.
+
+
+  METHOD just_outside_the_margin.
+    " 5 minutes and 1 second left
+    cl_abap_unit_assert=>assert_false( needs_refresh( '20261026120501' ) ).
+  ENDMETHOD.
+
+
+  METHOD inside_the_margin.
+    " 4 minutes left
+    cl_abap_unit_assert=>assert_true( needs_refresh( '20261026120400' ) ).
+  ENDMETHOD.
+
+
+  METHOD already_expired.
+    cl_abap_unit_assert=>assert_true( needs_refresh( '20261026080000' ) ).
+  ENDMETHOD.
+
+
+  METHOD expiring_token_answer.
+    DATA(tokens) = zcl_tr_auth=>tokens_from_response(
+      `{"access_token":"ghu_access","expires_in":28800,"refresh_token":"ghr_refresh",` &&
+      `"refresh_token_expires_in":15897600,"token_type":"bearer","scope":""}` ).
+
+    cl_abap_unit_assert=>assert_equals( act = tokens-token         exp = `ghu_access` ).
+    cl_abap_unit_assert=>assert_equals( act = tokens-refresh_token exp = `ghr_refresh` ).
+    cl_abap_unit_assert=>assert_equals( act = tokens-expires_in    exp = 28800 ).
+    cl_abap_unit_assert=>assert_initial( tokens-error ).
+  ENDMETHOD.
+
+
+  METHOD non_expiring_token_answer.
+    DATA(tokens) = zcl_tr_auth=>tokens_from_response(
+      `{"access_token":"ghu_access","token_type":"bearer","scope":""}` ).
+
+    cl_abap_unit_assert=>assert_equals( act = tokens-token exp = `ghu_access` ).
+    cl_abap_unit_assert=>assert_initial( tokens-refresh_token ).
+    cl_abap_unit_assert=>assert_initial( tokens-expires_in ).
+  ENDMETHOD.
+
+
+  METHOD refused_refresh_token.
+    DATA(tokens) = zcl_tr_auth=>tokens_from_response(
+      `{"error":"bad_refresh_token","error_description":"The refresh token passed is incorrect or expired."}` ).
+
+    cl_abap_unit_assert=>assert_equals( act = tokens-error exp = `bad_refresh_token` ).
+    cl_abap_unit_assert=>assert_initial( tokens-token ).
+  ENDMETHOD.
+
+
+  METHOD answer_without_token.
+    TRY.
+        zcl_tr_auth=>tokens_from_response( `{"token_type":"bearer"}` ).
+        cl_abap_unit_assert=>fail( 'an answer without token and without error must raise' ).
+      CATCH zcx_abapgit_exception.
+        RETURN.
+    ENDTRY.
   ENDMETHOD.
 
 ENDCLASS.

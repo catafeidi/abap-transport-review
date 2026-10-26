@@ -13,7 +13,13 @@ No shared account, no token in SM59. Each developer logs in to GitHub once on th
 | Push report | `ZTR_PUSH_TRANSPORT` | pull requests and merges on `api.github.com` with the token of the current user |
 | Release check | BAdI implementation `ZTR_RELEASE_CHECK` | refuses the release of anybody who is not logged in |
 
-The device flow needs only the public client ID of the GitHub App. No client secret is stored anywhere in SAP. Tokens of a GitHub App do not expire when the App is set up that way, so there is nothing to renew.
+The device flow needs only the public client ID of the GitHub App. No client secret is stored anywhere in SAP.
+
+**Expiring tokens.** With "Expire user authorization tokens" on (step 1 below), GitHub gives an access token that lives 8 hours and a refresh token that lives 6 months. `ZCL_TR_AUTH` keeps both, encrypted, and renews the access token by itself when less than 5 minutes are left, before a push or an API call, also in background jobs. Nobody has to log in again, unless SAP was not used for 6 months or the token was revoked. Tokens from the device flow are renewed without the client secret. A refresh token works once only, so the renewal runs under a lock per user (`ENQUEUE_E_TABLE` on `INDX`): two jobs of the same user that renew at the same moment do not reject each other.
+
+Why: the AES key lies next to the tokens in `INDX` (see below), so everybody who can run own ABAP on the system can decrypt a token. With expiry a copied access token dies within 8 hours, and when somebody uses a copied refresh token, the owner's next renewal fails and asks for a new login, which shows the misuse. It does not stop somebody who reads `INDX` again and again: treat whatever is stored in SAP as readable by developers, and keep the real gate on GitHub (branch rules, reviews).
+
+Should the program that triggered the renewal roll back its LUW afterwards, GitHub has already replaced the refresh token while SAP keeps the old one: the next use asks for a new login.
 
 **Why our own class and not SAP's OAuth 2.0 client (`OA2C_CONFIG`):** the Git endpoint of GitHub takes a token as Basic authentication with the user name `x-access-token`. SAP's OAuth client sends `Authorization: Bearer`, and its token is not visible to ABAP, so it cannot be turned into the form Git needs.
 
@@ -30,7 +36,7 @@ GitHub, Settings (of the user or organization), Developer settings, GitHub Apps,
 | Name | for example `SAP Transport Review` |
 | Homepage URL | any URL, for example the one of your repository |
 | Callback URL | leave empty |
-| Expire user authorization tokens | **off**. With it on, every token dies after eight hours and the developers would log in daily |
+| Expire user authorization tokens | **on**. Tokens live 8 hours; `ZCL_TR_AUTH` renews them with the refresh token, so nobody logs in daily. Tokens stored before the switch keep working until they are revoked; log in again to get an expiring one |
 | Request user authorization during installation | off |
 | Enable Device Flow | **on** |
 | Webhook, Active | off |
@@ -80,6 +86,7 @@ The same report shows the status and logs out. Logging out removes the token fro
 | Login, but the account cannot reach a linked repository | "GitHub account `<login>` of `<user>` has no access to: `<repositories>`. Ask the admin ..., then release again." |
 | Client ID missing in STVARV | login report: "STVARV parameter ZTR_CLIENT_ID is missing: the client ID of the GitHub App" |
 | Token revoked or expired on GitHub | the release check refuses with "GitHub does not accept the token of <user> any more (revoked or expired)"; log in again |
+| Refresh token refused (revoked, unused for 6 months, or already used elsewhere) | the stored token is removed; the next release or push says the user is not logged in; log in again |
 | Code not entered in time | "The code expired before it was entered on GitHub. Try again" |
 | App not allowed on GitHub | "You did not allow the app on GitHub. Nothing stored" |
 
