@@ -1,19 +1,42 @@
-"! The missing translations as an Excel file (.xlsx), and back.
+"! The missing translations as an Excel file (.xlsx) or as CSV files, and
+"! back.
 "!
 "! The file is built as Office Open XML with CL_ABAP_ZIP, and read with
 "! iXML: no other library is needed on the system.
 "!
-"! One line per text. Visible: type, object, kind of text, target
-"! language, source
-"! text, Translation, Max. length, Length, Length check. Length and Length
+"! One line per text. Visible: type, object, kind of text, source
+"! language, source text, target language, Translation, Max. length,
+"! Length, Length check. Length and Length
 "! check are formulas, and a translation that is too long is red, so the
 "! translator sees it while typing. The columns that find the text again
 "! (SE63 type and name, text key, customer number, language key) are
-"! hidden, and the sheet is protected: only Translation can be changed.
+"! hidden, and the sheet is protected: only Translation and Proposed
+"! source text can be changed.
+"!
+"! Proposed source text, next to the source text, is where a translator
+"! proposes a better wording of the source text itself. A proposal that
+"! differs from the source text marks both cells orange. Reading returns
+"! the proposals as SOURCE_CHANGES, once per text; they are never
+"! written: changing a source text is a change of the object, made by a
+"! developer.
+"!
+"! With hardcoded texts a second sheet "Hardcoded texts" follows: one
+"! line per literal in the source code that the user sees, with where it
+"! is, and two columns to type in, Proposed English and Proposed German.
+"! A developer moves such a text into a message or a text symbol and uses
+"! the proposals there; the sheet is never read back.
 "!
 "! Reading takes the columns by their heading, so the order does not
 "! matter. Both the strings Excel keeps in a table of their own and the
 "! strings written in the cell are read.
+"!
+"! The same lines can be written as CSV files instead (for a translation
+"! tool or a text editor, where nothing reformats a value): UTF-8 with
+"! byte order mark, every value in quotes, separated by semicolons; the
+"! hardcoded texts go into a CSV file of their own. A CSV file has no
+"! formulas, colours or protection. Reading accepts semicolons, commas or
+"! tabs as separator, so a file saved again by another program is read
+"! too, but it must stay UTF-8.
 "! ABAP 7.40 syntax.
 CLASS zcl_tr_transl_file DEFINITION
   PUBLIC
@@ -22,40 +45,97 @@ CLASS zcl_tr_transl_file DEFINITION
 
   PUBLIC SECTION.
     TYPES:
+      BEGIN OF ty_source_change,
+        object      TYPE trobjtype,
+        obj_name    TYPE trobj_name,
+        text_kind   TYPE zcl_tr_transl_check=>ty_finding-text_kind,
+        lxe_type    TYPE lxeobjtype,
+        lxe_name    TYPE lxeobjname,
+        text_key    TYPE lxetextkey,
+        source_text TYPE string,
+        proposed    TYPE string,
+      END OF ty_source_change.
+    TYPES ty_source_changes TYPE STANDARD TABLE OF ty_source_change WITH EMPTY KEY.
+    TYPES:
       BEGIN OF ty_read_result,
-        lines TYPE zcl_tr_transl_check=>ty_findings,
-        error TYPE string,
+        lines          TYPE zcl_tr_transl_check=>ty_findings,
+        source_changes TYPE ty_source_changes,
+        error          TYPE string,
       END OF ty_read_result.
 
     CONSTANTS:
       BEGIN OF heading,
-        object       TYPE string VALUE `Type`,
-        obj_name     TYPE string VALUE `Object`,
-        text_kind    TYPE string VALUE `Kind of text`,
-        language     TYPE string VALUE `Language`,
-        source_text  TYPE string VALUE `Source text`,
-        target_text  TYPE string VALUE `Translation`,
-        max_length   TYPE string VALUE `Max. length`,
-        length       TYPE string VALUE `Length`,
-        length_check TYPE string VALUE `Length check`,
-        lxe_type     TYPE string VALUE `SE63 type`,
-        lxe_name     TYPE string VALUE `SE63 name`,
-        text_key     TYPE string VALUE `Text key`,
-        custmnr      TYPE string VALUE `Customer number`,
-        language_key TYPE string VALUE `Language key`,
+        object          TYPE string VALUE `Type`,
+        obj_name        TYPE string VALUE `Object`,
+        text_kind       TYPE string VALUE `Kind of text`,
+        source_language TYPE string VALUE `Source language`,
+        source_text     TYPE string VALUE `Source text`,
+        proposed_source TYPE string VALUE `Proposed source text`,
+        language        TYPE string VALUE `Target language`,
+        target_text     TYPE string VALUE `Translation`,
+        max_length      TYPE string VALUE `Max. length`,
+        length          TYPE string VALUE `Length`,
+        length_check    TYPE string VALUE `Length check`,
+        lxe_type        TYPE string VALUE `SE63 type`,
+        lxe_name        TYPE string VALUE `SE63 name`,
+        text_key        TYPE string VALUE `Text key`,
+        custmnr         TYPE string VALUE `Customer number`,
+        language_key    TYPE string VALUE `Language key`,
       END OF heading.
+    CONSTANTS:
+      BEGIN OF hardcoded_heading,
+        object           TYPE string VALUE `Type`,
+        obj_name         TYPE string VALUE `Object`,
+        include          TYPE string VALUE `Include`,
+        line             TYPE string VALUE `Line`,
+        kind             TYPE string VALUE `Kind`,
+        text             TYPE string VALUE `Text in the code`,
+        proposed_english TYPE string VALUE `Proposed English`,
+        proposed_german  TYPE string VALUE `Proposed German`,
+      END OF hardcoded_heading.
 
     "! The lines as an .xlsx file; the Translation column holds the
-    "! translation of each line, if it has one.
+    "! translation of each line, if it has one. Hardcoded texts, if any, go
+    "! into a second sheet.
     METHODS to_xlsx
       IMPORTING
         lines         TYPE zcl_tr_transl_check=>ty_findings
+        hardcoded     TYPE zcl_tr_transl_hardcoded=>ty_findings OPTIONAL
       RETURNING
         VALUE(result) TYPE xstring.
     "! The lines of a file made by TO_XLSX, with the translations typed in
     "! it. Lines without SE63 name are left out. ERROR is set when the file
     "! is not such a file; then LINES is empty.
     METHODS from_xlsx
+      IMPORTING
+        file          TYPE xstring
+      RETURNING
+        VALUE(result) TYPE ty_read_result.
+    "! The lines as a CSV file: UTF-8 with byte order mark, values in
+    "! quotes, separated by semicolons. The same columns as the Excel file,
+    "! without the formulas Length and Length check.
+    METHODS to_csv
+      IMPORTING
+        lines         TYPE zcl_tr_transl_check=>ty_findings
+      RETURNING
+        VALUE(result) TYPE xstring.
+    "! The hardcoded texts as a CSV file of their own, with the two columns
+    "! for proposals; it is never read back.
+    METHODS hardcoded_to_csv
+      IMPORTING
+        hardcoded     TYPE zcl_tr_transl_hardcoded=>ty_findings
+      RETURNING
+        VALUE(result) TYPE xstring.
+    "! The lines of a CSV file made by TO_CSV. Semicolons, commas or tabs
+    "! as separator, with or without quotes and byte order mark; the text
+    "! must be UTF-8. ERROR as in FROM_XLSX.
+    METHODS from_csv
+      IMPORTING
+        file          TYPE xstring
+      RETURNING
+        VALUE(result) TYPE ty_read_result.
+    "! FROM_XLSX for an Excel file, FROM_CSV for any other file.
+    METHODS from_file
       IMPORTING
         file          TYPE xstring
       RETURNING
@@ -80,6 +160,11 @@ CLASS zcl_tr_transl_file DEFINITION
     CONSTANTS sheet_part TYPE string VALUE `xl/worksheets/sheet1.xml`.
     CONSTANTS strings_part TYPE string VALUE `xl/sharedStrings.xml`.
     CONSTANTS sheet_name TYPE string VALUE `Translations`.
+    CONSTANTS hardcoded_part TYPE string VALUE `xl/worksheets/sheet2.xml`.
+    CONSTANTS hardcoded_sheet_name TYPE string VALUE `Hardcoded texts`.
+    CONSTANTS csv_separator_written TYPE string VALUE `;`.
+    " PK: the first two bytes of every ZIP file, so of every .xlsx file.
+    CONSTANTS zip_signature TYPE x LENGTH 2 VALUE '504B'.
     " Cell styles of styles.xml: 0 text, 1 heading, 2 the editable Translation.
     CONSTANTS:
       BEGIN OF style,
@@ -89,19 +174,24 @@ CLASS zcl_tr_transl_file DEFINITION
       END OF style.
 
     METHODS content_types
+      IMPORTING
+        with_hardcoded TYPE abap_bool
       RETURNING
-        VALUE(result) TYPE string.
+        VALUE(result)  TYPE string.
     METHODS package_relations
       RETURNING
         VALUE(result) TYPE string.
     METHODS workbook
       IMPORTING
-        last_row      TYPE i
+        last_row           TYPE i
+        last_hardcoded_row TYPE i
       RETURNING
-        VALUE(result) TYPE string.
+        VALUE(result)      TYPE string.
     METHODS workbook_relations
+      IMPORTING
+        with_hardcoded TYPE abap_bool
       RETURNING
-        VALUE(result) TYPE string.
+        VALUE(result)  TYPE string.
     METHODS styles
       RETURNING
         VALUE(result) TYPE string.
@@ -111,6 +201,17 @@ CLASS zcl_tr_transl_file DEFINITION
       RETURNING
         VALUE(result) TYPE string.
     METHODS heading_row
+      RETURNING
+        VALUE(result) TYPE string.
+    METHODS hardcoded_sheet
+      IMPORTING
+        hardcoded     TYPE zcl_tr_transl_hardcoded=>ty_findings
+      RETURNING
+        VALUE(result) TYPE string.
+    METHODS hardcoded_row
+      IMPORTING
+        finding       TYPE zcl_tr_transl_hardcoded=>ty_finding
+        row           TYPE i
       RETURNING
         VALUE(result) TYPE string.
     METHODS data_row
@@ -178,6 +279,30 @@ CLASS zcl_tr_transl_file DEFINITION
         heading       TYPE string
       RETURNING
         VALUE(result) TYPE string.
+
+    METHODS csv_file
+      IMPORTING
+        rows          TYPE string_table
+      RETURNING
+        VALUE(result) TYPE xstring.
+    METHODS csv_row
+      IMPORTING
+        values        TYPE string_table
+      RETURNING
+        VALUE(result) TYPE string.
+    METHODS csv_separator
+      IMPORTING
+        text          TYPE string
+      RETURNING
+        VALUE(result) TYPE string.
+    "! The values of a CSV text as cells: row 1 is the heading, the column
+    "! is the number of the value in its row.
+    METHODS csv_cells
+      IMPORTING
+        text          TYPE string
+        separator     TYPE string
+      RETURNING
+        VALUE(result) TYPE ty_cells.
 ENDCLASS.
 
 
@@ -186,13 +311,25 @@ CLASS zcl_tr_transl_file IMPLEMENTATION.
 
 
   METHOD to_xlsx.
+    DATA(with_hardcoded) = xsdbool( hardcoded IS NOT INITIAL ).
+    DATA(last_hardcoded_row) = COND i( WHEN with_hardcoded = abap_true THEN lines( hardcoded ) + 1 ).
     DATA(zip) = NEW cl_abap_zip( ).
-    zip->add( name = `[Content_Types].xml`        content = utf8( content_types( ) ) ).
-    zip->add( name = `_rels/.rels`                content = utf8( package_relations( ) ) ).
-    zip->add( name = `xl/workbook.xml`            content = utf8( workbook( lines( lines ) + 1 ) ) ).
-    zip->add( name = `xl/_rels/workbook.xml.rels` content = utf8( workbook_relations( ) ) ).
-    zip->add( name = `xl/styles.xml`              content = utf8( styles( ) ) ).
-    zip->add( name = sheet_part                   content = utf8( sheet( lines ) ) ).
+    zip->add( name    = `[Content_Types].xml`
+              content = utf8( content_types( with_hardcoded ) ) ).
+    zip->add( name    = `_rels/.rels`
+              content = utf8( package_relations( ) ) ).
+    zip->add( name    = `xl/workbook.xml`
+              content = utf8( workbook( last_row = lines( lines ) + 1 last_hardcoded_row = last_hardcoded_row ) ) ).
+    zip->add( name    = `xl/_rels/workbook.xml.rels`
+              content = utf8( workbook_relations( with_hardcoded ) ) ).
+    zip->add( name    = `xl/styles.xml`
+              content = utf8( styles( ) ) ).
+    zip->add( name    = sheet_part
+              content = utf8( sheet( lines ) ) ).
+    IF with_hardcoded = abap_true.
+      zip->add( name    = hardcoded_part
+                content = utf8( hardcoded_sheet( hardcoded ) ) ).
+    ENDIF.
     result = zip->save( ).
   ENDMETHOD.
 
@@ -207,6 +344,9 @@ CLASS zcl_tr_transl_file IMPLEMENTATION.
       `ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` &&
       `<Override PartName="/xl/worksheets/sheet1.xml" ` &&
       `ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` &&
+      COND string( WHEN with_hardcoded = abap_true THEN
+        |<Override PartName="/{ hardcoded_part }" | &&
+        `ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` ) &&
       `<Override PartName="/xl/styles.xml" ` &&
       `ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` &&
       `</Types>`.
@@ -225,15 +365,23 @@ CLASS zcl_tr_transl_file IMPLEMENTATION.
 
 
   METHOD workbook.
-    " The filter of the heading row needs its range as a defined name.
-    " Formulas are calculated when Excel opens the file.
+    " The filter of each heading row needs its range as a defined name.
+    " Formulas are calculated when Excel opens the file. LAST_HARDCODED_ROW
+    " is 0 when there is no sheet of hardcoded texts.
+    DATA(sheets) = |<sheet name="{ sheet_name }" sheetId="1" r:id="rId1"/>|.
+    DATA(names) = |<definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">| &&
+                  |{ sheet_name }!$A$1:$K${ last_row }</definedName>|.
+    IF last_hardcoded_row > 0.
+      sheets = |{ sheets }<sheet name="{ hardcoded_sheet_name }" sheetId="2" r:id="rId3"/>|.
+      names = |{ names }<definedName name="_xlnm._FilterDatabase" localSheetId="1" hidden="1">| &&
+              |'{ hardcoded_sheet_name }'!$A$1:$H${ last_hardcoded_row }</definedName>|.
+    ENDIF.
     result =
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` &&
       |<workbook xmlns="{ spreadsheet_namespace }" | &&
       `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` &&
-      |<sheets><sheet name="{ sheet_name }" sheetId="1" r:id="rId1"/></sheets>| &&
-      |<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">| &&
-      |{ sheet_name }!$A$1:$I${ last_row }</definedName></definedNames>| &&
+      |<sheets>{ sheets }</sheets>| &&
+      |<definedNames>{ names }</definedNames>| &&
       `<calcPr calcId="0" fullCalcOnLoad="1"/>` &&
       `</workbook>`.
   ENDMETHOD.
@@ -249,6 +397,10 @@ CLASS zcl_tr_transl_file IMPLEMENTATION.
       `<Relationship Id="rId2" ` &&
       `Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" ` &&
       `Target="styles.xml"/>` &&
+      COND string( WHEN with_hardcoded = abap_true THEN
+        `<Relationship Id="rId3" ` &&
+        `Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" ` &&
+        `Target="worksheets/sheet2.xml"/>` ) &&
       `</Relationships>`.
   ENDMETHOD.
 
@@ -256,7 +408,8 @@ CLASS zcl_tr_transl_file IMPLEMENTATION.
   METHOD styles.
     " Style 2, the Translation column: text format (a translation such as
     " "1.10" stays text), light yellow, not locked by the sheet protection.
-    " The one differential format is the red of a text that is too long.
+    " Differential formats: 0 the red of a text that is too long, 1 the
+    " orange of a proposed change of the source text.
     result =
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` &&
       |<styleSheet xmlns="{ spreadsheet_namespace }">| &&
@@ -280,16 +433,22 @@ CLASS zcl_tr_transl_file IMPLEMENTATION.
       `<protection locked="0"/></xf>` &&
       `</cellXfs>` &&
       `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` &&
-      `<dxfs count="1"><dxf><font><b/><color rgb="FF9C0006"/></font>` &&
-      `<fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf></dxfs>` &&
+      `<dxfs count="2">` &&
+      `<dxf><font><b/><color rgb="FF9C0006"/></font>` &&
+      `<fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf>` &&
+      `<dxf><font><color rgb="FF9C5700"/></font>` &&
+      `<fill><patternFill><bgColor rgb="FFFFD8A8"/></patternFill></fill></dxf>` &&
+      `</dxfs>` &&
       `</styleSheet>`.
   ENDMETHOD.
 
 
   METHOD sheet.
-    " Columns: A type, B object, C kind of text, D language, E source text,
-    " F Translation, G Max. length, H Length, I Length check; hidden: J SE63
-    " type, K SE63 name, L text key, M customer number, N language key.
+    " Columns: A type, B object, C kind of text, D source language, E source
+    " text, F Proposed source text, G target language, H Translation, I Max.
+    " length, J Length, K Length check; hidden: L SE63 type, M SE63 name,
+    " N text key, O customer number, P language key. F and H can be typed
+    " in; both are red when longer than Max. length.
     DATA(last_row) = lines( lines ) + 1.
     DATA(rows) = heading_row( ).
     LOOP AT lines INTO DATA(line).
@@ -300,7 +459,7 @@ CLASS zcl_tr_transl_file IMPLEMENTATION.
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` &&
       |<worksheet xmlns="{ spreadsheet_namespace }" | &&
       `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` &&
-      |<dimension ref="A1:N{ last_row }"/>| &&
+      |<dimension ref="A1:P{ last_row }"/>| &&
       `<sheetViews><sheetView workbookViewId="0">` &&
       `<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>` &&
       `</sheetView></sheetViews>` &&
@@ -310,22 +469,33 @@ CLASS zcl_tr_transl_file IMPLEMENTATION.
       `<col min="2" max="2" width="32" customWidth="1"/>` &&
       `<col min="3" max="3" width="30" customWidth="1"/>` &&
       `<col min="4" max="4" width="10" customWidth="1"/>` &&
-      `<col min="5" max="6" width="55" customWidth="1"/>` &&
-      `<col min="7" max="8" width="11" customWidth="1"/>` &&
-      `<col min="9" max="9" width="16" customWidth="1"/>` &&
-      `<col min="10" max="14" width="14" hidden="1" customWidth="1"/>` &&
+      `<col min="5" max="6" width="45" customWidth="1"/>` &&
+      `<col min="7" max="7" width="10" customWidth="1"/>` &&
+      `<col min="8" max="8" width="55" customWidth="1"/>` &&
+      `<col min="9" max="10" width="11" customWidth="1"/>` &&
+      `<col min="11" max="11" width="16" customWidth="1"/>` &&
+      `<col min="12" max="16" width="14" hidden="1" customWidth="1"/>` &&
       `</cols>` &&
       |<sheetData>{ rows }</sheetData>| &&
       `<sheetProtection sheet="1" objects="1" scenarios="1" formatColumns="0" formatRows="0" ` &&
       `autoFilter="0" sort="0"/>` &&
-      |<autoFilter ref="A1:I{ last_row }"/>| &&
-      |<conditionalFormatting sqref="F2:F{ last_row } I2:I{ last_row }">| &&
+      |<autoFilter ref="A1:K{ last_row }"/>| &&
+      |<conditionalFormatting sqref="H2:H{ last_row } K2:K{ last_row }">| &&
       `<cfRule type="expression" dxfId="0" priority="1">` &&
-      `<formula>AND($G2&gt;0,LEN($F2)&gt;$G2)</formula></cfRule></conditionalFormatting>` &&
-      `<dataValidations count="1">` &&
+      `<formula>AND($I2&gt;0,LEN($H2)&gt;$I2)</formula></cfRule></conditionalFormatting>` &&
+      |<conditionalFormatting sqref="F2:F{ last_row }">| &&
+      `<cfRule type="expression" dxfId="0" priority="2">` &&
+      `<formula>AND($I2&gt;0,LEN($F2)&gt;$I2)</formula></cfRule></conditionalFormatting>` &&
+      |<conditionalFormatting sqref="E2:F{ last_row }">| &&
+      `<cfRule type="expression" dxfId="1" priority="3">` &&
+      `<formula>AND($F2&lt;&gt;"",$F2&lt;&gt;$E2)</formula></cfRule></conditionalFormatting>` &&
+      `<dataValidations count="2">` &&
       |<dataValidation type="custom" errorStyle="warning" allowBlank="1" showErrorMessage="1" | &&
       |errorTitle="Too long" error="The translation is longer than Max. length. SAP does not save it." | &&
-      |sqref="F2:F{ last_row }"><formula1>OR($G2=0,LEN($F2)&lt;=$G2)</formula1></dataValidation>| &&
+      |sqref="H2:H{ last_row }"><formula1>OR($I2=0,LEN($H2)&lt;=$I2)</formula1></dataValidation>| &&
+      |<dataValidation type="custom" errorStyle="warning" allowBlank="1" showErrorMessage="1" | &&
+      |errorTitle="Too long" error="The proposed source text is longer than Max. length." | &&
+      |sqref="F2:F{ last_row }"><formula1>OR($I2=0,LEN($F2)&lt;=$I2)</formula1></dataValidation>| &&
       `</dataValidations>` &&
       `<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>` &&
       `</worksheet>`.
@@ -335,48 +505,115 @@ CLASS zcl_tr_transl_file IMPLEMENTATION.
   METHOD heading_row.
     result =
       `<row r="1">` &&
-      text_cell( reference = `A1` value = heading-object       cell_style = style-heading ) &&
-      text_cell( reference = `B1` value = heading-obj_name     cell_style = style-heading ) &&
-      text_cell( reference = `C1` value = heading-text_kind    cell_style = style-heading ) &&
-      text_cell( reference = `D1` value = heading-language     cell_style = style-heading ) &&
-      text_cell( reference = `E1` value = heading-source_text  cell_style = style-heading ) &&
-      text_cell( reference = `F1` value = heading-target_text  cell_style = style-heading ) &&
-      text_cell( reference = `G1` value = heading-max_length   cell_style = style-heading ) &&
-      text_cell( reference = `H1` value = heading-length       cell_style = style-heading ) &&
-      text_cell( reference = `I1` value = heading-length_check cell_style = style-heading ) &&
-      text_cell( reference = `J1` value = heading-lxe_type     cell_style = style-heading ) &&
-      text_cell( reference = `K1` value = heading-lxe_name     cell_style = style-heading ) &&
-      text_cell( reference = `L1` value = heading-text_key     cell_style = style-heading ) &&
-      text_cell( reference = `M1` value = heading-custmnr      cell_style = style-heading ) &&
-      text_cell( reference = `N1` value = heading-language_key cell_style = style-heading ) &&
+      text_cell( reference = `A1` value = heading-object          cell_style = style-heading ) &&
+      text_cell( reference = `B1` value = heading-obj_name        cell_style = style-heading ) &&
+      text_cell( reference = `C1` value = heading-text_kind       cell_style = style-heading ) &&
+      text_cell( reference = `D1` value = heading-source_language cell_style = style-heading ) &&
+      text_cell( reference = `E1` value = heading-source_text     cell_style = style-heading ) &&
+      text_cell( reference = `F1` value = heading-proposed_source cell_style = style-heading ) &&
+      text_cell( reference = `G1` value = heading-language        cell_style = style-heading ) &&
+      text_cell( reference = `H1` value = heading-target_text     cell_style = style-heading ) &&
+      text_cell( reference = `I1` value = heading-max_length      cell_style = style-heading ) &&
+      text_cell( reference = `J1` value = heading-length          cell_style = style-heading ) &&
+      text_cell( reference = `K1` value = heading-length_check    cell_style = style-heading ) &&
+      text_cell( reference = `L1` value = heading-lxe_type        cell_style = style-heading ) &&
+      text_cell( reference = `M1` value = heading-lxe_name        cell_style = style-heading ) &&
+      text_cell( reference = `N1` value = heading-text_key        cell_style = style-heading ) &&
+      text_cell( reference = `O1` value = heading-custmnr         cell_style = style-heading ) &&
+      text_cell( reference = `P1` value = heading-language_key    cell_style = style-heading ) &&
       `</row>`.
   ENDMETHOD.
 
 
   METHOD data_row.
     DATA(r) = |{ row }|.
-    " The Translation cell is written even when empty: its style is what
-    " lets it be typed in.
+    " The Translation and Proposed source text cells are written even when
+    " empty: their style is what lets them be typed in.
     DATA(translation) = COND string(
-      WHEN line-target_text IS INITIAL THEN |<c r="F{ r }" s="{ style-translation }"/>|
-      ELSE text_cell( reference = |F{ r }| value = line-target_text cell_style = style-translation ) ).
+      WHEN line-target_text IS INITIAL THEN |<c r="H{ r }" s="{ style-translation }"/>|
+      ELSE text_cell( reference = |H{ r }| value = line-target_text cell_style = style-translation ) ).
     result =
       |<row r="{ r }">| &&
       text_cell( reference = |A{ r }| value = line-object ) &&
       text_cell( reference = |B{ r }| value = condense( line-obj_name ) ) &&
       text_cell( reference = |C{ r }| value = line-text_kind ) &&
-      text_cell( reference = |D{ r }| value = zcl_tr_transl_check=>language_code( line-language ) ) &&
+      text_cell( reference = |D{ r }| value = zcl_tr_transl_check=>language_code( line-source_language ) ) &&
       text_cell( reference = |E{ r }| value = line-source_text ) &&
+      |<c r="F{ r }" s="{ style-translation }"/>| &&
+      text_cell( reference = |G{ r }| value = zcl_tr_transl_check=>language_code( line-language ) ) &&
       translation &&
-      |<c r="G{ r }"><v>{ line-max_length }</v></c>| &&
-      |<c r="H{ r }"><f>LEN(F{ r })</f></c>| &&
-      |<c r="I{ r }" t="str"><f>IF(F{ r }="","",IF(AND(G{ r }&gt;0,LEN(F{ r })&gt;G{ r }),| &&
-      |"Too long by "&amp;(LEN(F{ r })-G{ r }),"OK"))</f></c>| &&
-      text_cell( reference = |J{ r }| value = line-lxe_type ) &&
-      text_cell( reference = |K{ r }| value = line-lxe_name ) &&
-      text_cell( reference = |L{ r }| value = line-text_key ) &&
-      text_cell( reference = |M{ r }| value = line-custmnr ) &&
-      text_cell( reference = |N{ r }| value = line-language ) &&
+      |<c r="I{ r }"><v>{ line-max_length }</v></c>| &&
+      |<c r="J{ r }"><f>LEN(H{ r })</f></c>| &&
+      |<c r="K{ r }" t="str"><f>IF(H{ r }="","",IF(AND(I{ r }&gt;0,LEN(H{ r })&gt;I{ r }),| &&
+      |"Too long by "&amp;(LEN(H{ r })-I{ r }),"OK"))</f></c>| &&
+      text_cell( reference = |L{ r }| value = line-lxe_type ) &&
+      text_cell( reference = |M{ r }| value = line-lxe_name ) &&
+      text_cell( reference = |N{ r }| value = line-text_key ) &&
+      text_cell( reference = |O{ r }| value = line-custmnr ) &&
+      text_cell( reference = |P{ r }| value = line-language ) &&
+      `</row>`.
+  ENDMETHOD.
+
+
+  METHOD hardcoded_sheet.
+    " Columns: A type, B object, C include, D line, E kind, F text in the
+    " code, G Proposed English, H Proposed German. Only G and H can be
+    " typed in.
+    DATA(last_row) = lines( hardcoded ) + 1.
+    DATA(rows) =
+      `<row r="1">` &&
+      text_cell( reference = `A1` value = hardcoded_heading-object           cell_style = style-heading ) &&
+      text_cell( reference = `B1` value = hardcoded_heading-obj_name         cell_style = style-heading ) &&
+      text_cell( reference = `C1` value = hardcoded_heading-include          cell_style = style-heading ) &&
+      text_cell( reference = `D1` value = hardcoded_heading-line             cell_style = style-heading ) &&
+      text_cell( reference = `E1` value = hardcoded_heading-kind             cell_style = style-heading ) &&
+      text_cell( reference = `F1` value = hardcoded_heading-text             cell_style = style-heading ) &&
+      text_cell( reference = `G1` value = hardcoded_heading-proposed_english cell_style = style-heading ) &&
+      text_cell( reference = `H1` value = hardcoded_heading-proposed_german  cell_style = style-heading ) &&
+      `</row>`.
+    LOOP AT hardcoded INTO DATA(finding).
+      rows = rows && hardcoded_row( finding = finding row = sy-tabix + 1 ).
+    ENDLOOP.
+
+    result =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` &&
+      |<worksheet xmlns="{ spreadsheet_namespace }" | &&
+      `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` &&
+      |<dimension ref="A1:H{ last_row }"/>| &&
+      `<sheetViews><sheetView workbookViewId="0">` &&
+      `<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>` &&
+      `</sheetView></sheetViews>` &&
+      `<sheetFormatPr defaultRowHeight="15"/>` &&
+      `<cols>` &&
+      `<col min="1" max="1" width="7" customWidth="1"/>` &&
+      `<col min="2" max="3" width="32" customWidth="1"/>` &&
+      `<col min="4" max="4" width="7" customWidth="1"/>` &&
+      `<col min="5" max="5" width="14" customWidth="1"/>` &&
+      `<col min="6" max="8" width="50" customWidth="1"/>` &&
+      `</cols>` &&
+      |<sheetData>{ rows }</sheetData>| &&
+      `<sheetProtection sheet="1" objects="1" scenarios="1" formatColumns="0" formatRows="0" ` &&
+      `autoFilter="0" sort="0"/>` &&
+      |<autoFilter ref="A1:H{ last_row }"/>| &&
+      `<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>` &&
+      `</worksheet>`.
+  ENDMETHOD.
+
+
+  METHOD hardcoded_row.
+    DATA(r) = |{ row }|.
+    " The two proposal cells are written empty: their style is what lets
+    " them be typed in.
+    result =
+      |<row r="{ r }">| &&
+      text_cell( reference = |A{ r }| value = finding-object ) &&
+      text_cell( reference = |B{ r }| value = condense( finding-obj_name ) ) &&
+      text_cell( reference = |C{ r }| value = condense( finding-include ) ) &&
+      |<c r="D{ r }"><v>{ finding-line }</v></c>| &&
+      text_cell( reference = |E{ r }| value = finding-kind ) &&
+      text_cell( reference = |F{ r }| value = finding-text ) &&
+      |<c r="G{ r }" s="{ style-translation }"/>| &&
+      |<c r="H{ r }" s="{ style-translation }"/>| &&
       `</row>`.
   ENDMETHOD.
 
@@ -583,6 +820,23 @@ CLASS zcl_tr_transl_file IMPLEMENTATION.
         CONTINUE.
       ENDIF.
       APPEND line TO result-lines.
+
+      " A proposed source text: once per text, whatever target language
+      " line it was typed on. Files without the column have none.
+      DATA(proposed) = value_at( cells = cells columns = columns row = row heading = heading-proposed_source ).
+      IF proposed IS NOT INITIAL AND proposed <> line-source_text AND
+         NOT line_exists( result-source_changes[ lxe_type = line-lxe_type
+                                                 lxe_name = line-lxe_name
+                                                 text_key = line-text_key ] ).
+        APPEND VALUE #( object      = line-object
+                        obj_name    = line-obj_name
+                        text_kind   = value_at( cells = cells columns = columns row = row heading = heading-text_kind )
+                        lxe_type    = line-lxe_type
+                        lxe_name    = line-lxe_name
+                        text_key    = line-text_key
+                        source_text = line-source_text
+                        proposed    = proposed ) TO result-source_changes.
+      ENDIF.
     ENDDO.
   ENDMETHOD.
 
@@ -595,6 +849,182 @@ CLASS zcl_tr_transl_file IMPLEMENTATION.
     READ TABLE cells INTO DATA(cell) WITH TABLE KEY row = row column = column-column.
     IF sy-subrc = 0.
       result = cell-value.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD to_csv.
+    DATA(rows) = VALUE string_table(
+      ( csv_row( VALUE #( ( heading-object ) ( heading-obj_name ) ( heading-text_kind ) ( heading-source_language )
+                          ( heading-source_text ) ( heading-proposed_source ) ( heading-language )
+                          ( heading-target_text ) ( heading-max_length ) ( heading-lxe_type ) ( heading-lxe_name )
+                          ( heading-text_key ) ( heading-custmnr ) ( heading-language_key ) ) ) ) ).
+    " Proposed source text is empty: it is for the translator.
+    LOOP AT lines INTO DATA(line).
+      APPEND csv_row( VALUE #( ( CONV #( line-object ) )
+                               ( condense( line-obj_name ) )
+                               ( CONV #( line-text_kind ) )
+                               ( zcl_tr_transl_check=>language_code( line-source_language ) )
+                               ( CONV #( line-source_text ) )
+                               ( `` )
+                               ( zcl_tr_transl_check=>language_code( line-language ) )
+                               ( CONV #( line-target_text ) )
+                               ( |{ line-max_length }| )
+                               ( CONV #( line-lxe_type ) )
+                               ( CONV #( line-lxe_name ) )
+                               ( CONV #( line-text_key ) )
+                               ( CONV #( line-custmnr ) )
+                               ( CONV #( line-language ) ) ) ) TO rows.
+    ENDLOOP.
+    result = csv_file( rows ).
+  ENDMETHOD.
+
+
+  METHOD hardcoded_to_csv.
+    DATA(rows) = VALUE string_table(
+      ( csv_row( VALUE #( ( hardcoded_heading-object ) ( hardcoded_heading-obj_name ) ( hardcoded_heading-include )
+                          ( hardcoded_heading-line ) ( hardcoded_heading-kind ) ( hardcoded_heading-text )
+                          ( hardcoded_heading-proposed_english ) ( hardcoded_heading-proposed_german ) ) ) ) ).
+    LOOP AT hardcoded INTO DATA(finding).
+      APPEND csv_row( VALUE #( ( CONV #( finding-object ) )
+                               ( condense( finding-obj_name ) )
+                               ( condense( finding-include ) )
+                               ( |{ finding-line }| )
+                               ( CONV #( finding-kind ) )
+                               ( finding-text )
+                               ( `` )
+                               ( `` ) ) ) TO rows.
+    ENDLOOP.
+    result = csv_file( rows ).
+  ENDMETHOD.
+
+
+  METHOD csv_file.
+    " The byte order mark tells every program that the text is UTF-8.
+    DATA(text) = concat_lines_of( table = rows sep = cl_abap_char_utilities=>cr_lf ) && cl_abap_char_utilities=>cr_lf.
+    DATA(content) = utf8( text ).
+    CONCATENATE cl_abap_char_utilities=>byte_order_mark_utf8 content INTO result IN BYTE MODE.
+  ENDMETHOD.
+
+
+  METHOD csv_row.
+    " Every value in quotes, a quote in it doubled: separators, line
+    " breaks and blanks at the ends are then part of the value.
+    DATA(quoted) = VALUE string_table( FOR value IN values
+                                       ( |"{ replace( val = value sub = `"` with = `""` occ = 0 ) }"| ) ).
+    result = concat_lines_of( table = quoted sep = csv_separator_written ).
+  ENDMETHOD.
+
+
+  METHOD from_csv.
+    DATA start TYPE x LENGTH 3.
+
+    DATA(content) = file.
+    start = content.
+    IF xstrlen( content ) >= 3 AND start = cl_abap_char_utilities=>byte_order_mark_utf8.
+      SHIFT content LEFT BY 3 PLACES IN BYTE MODE.
+    ENDIF.
+    TRY.
+        DATA(text) = cl_abap_codepage=>convert_from( source = content codepage = `UTF-8` ).
+      CATCH cx_sy_conversion_codepage cx_parameter_invalid.
+        result-error = `The file is not in UTF-8: save it as "CSV UTF-8" and upload it again`.
+        RETURN.
+    ENDTRY.
+    result = lines_of( csv_cells( text = text separator = csv_separator( text ) ) ).
+  ENDMETHOD.
+
+
+  METHOD csv_separator.
+    " The one that occurs most often in the heading row; a semicolon when
+    " none does.
+    DATA(first_row) = text.
+    DATA(row_end) = find_any_of( val = text sub = cl_abap_char_utilities=>cr_lf ).
+    IF row_end >= 0.
+      first_row = substring( val = text len = row_end ).
+    ENDIF.
+    result = csv_separator_written.
+    DATA(most) = count( val = first_row sub = result ).
+    DATA(candidates) = VALUE string_table( ( `,` ) ( |\t| ) ).
+    LOOP AT candidates INTO DATA(candidate).
+      IF count( val = first_row sub = candidate ) > most.
+        result = candidate.
+        most = count( val = first_row sub = candidate ).
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD csv_cells.
+    DATA value TYPE string.
+
+    DATA(carriage_return) = substring( val = cl_abap_char_utilities=>cr_lf len = 1 ).
+    DATA(stops) = separator && cl_abap_char_utilities=>cr_lf.
+    DATA(length) = strlen( text ).
+    DATA(position) = 0.
+    DATA(row) = 1.
+    DATA(column) = 1.
+    WHILE position < length.
+      CLEAR value.
+      IF substring( val = text off = position len = 1 ) = `"`.
+        " A value in quotes: two quotes in it stand for one.
+        position = position + 1.
+        DO.
+          DATA(closing) = find( val = text sub = `"` off = position ).
+          IF closing < 0.
+            value = value && substring( val = text off = position ).
+            position = length.
+            EXIT.
+          ENDIF.
+          value = value && substring( val = text off = position len = closing - position ).
+          position = closing + 1.
+          IF position < length AND substring( val = text off = position len = 1 ) = `"`.
+            value = value && `"`.
+            position = position + 1.
+          ELSE.
+            EXIT.
+          ENDIF.
+        ENDDO.
+      ENDIF.
+      " The rest up to the separator or the end of the row: all of a value
+      " without quotes.
+      DATA(stop) = find_any_of( val = text sub = stops off = position ).
+      IF stop < 0.
+        stop = length.
+      ENDIF.
+      value = value && substring( val = text off = position len = stop - position ).
+      IF value IS NOT INITIAL.
+        INSERT VALUE #( row = row column = |{ column }| value = value ) INTO TABLE result.
+      ENDIF.
+      position = stop.
+      IF position >= length.
+        EXIT.
+      ENDIF.
+
+      DATA(stop_character) = substring( val = text off = position len = 1 ).
+      position = position + 1.
+      IF stop_character = separator.
+        column = column + 1.
+        CONTINUE.
+      ENDIF.
+      " CR LF, CR or LF ends the row.
+      IF stop_character = carriage_return AND position < length AND
+         substring( val = text off = position len = 1 ) = cl_abap_char_utilities=>newline.
+        position = position + 1.
+      ENDIF.
+      row = row + 1.
+      column = 1.
+    ENDWHILE.
+  ENDMETHOD.
+
+
+  METHOD from_file.
+    DATA start TYPE x LENGTH 2.
+
+    start = file.
+    IF xstrlen( file ) >= 2 AND start = zip_signature.
+      result = from_xlsx( file ).
+    ELSE.
+      result = from_csv( file ).
     ENDIF.
   ENDMETHOD.
 

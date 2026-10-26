@@ -42,14 +42,16 @@ METHOD if_ex_cts_request_check~check_before_release.
 *                          = BLOCK  -> the release is refused while a
 *                                      text is missing
 *
-* On the screen the developer can choose "Translate now": the selection
-* screen of report ZTR_TRANSL_REPORT opens, filled with the task or
-* request being released, "Enter translations" and "Record in". F8 shows
-* the missing texts in an editable list; or the texts are downloaded as
-* an Excel file, and at the next release a translated file is uploaded.
+* On the screen the developer can choose "Translate now": report
+* ZTR_TRANSL_REPORT opens the editable list of the missing texts of the
+* task or request being released. The translations are typed into the
+* list, or downloaded and uploaded as an Excel file with the buttons of
+* its toolbar (the upload also at the next release).
 * Save writes the translations as SE63 does and records them in the task
-* or request being released. Then the check runs again, and when nothing
-* is missing any more the release goes on by itself.
+* or request being released. After "Translate now" this release always
+* stops: it works on the object list read before Save, so it would not
+* carry the translations just recorded. The developer releases again;
+* with everything translated the check passes.
 *
 * A translation that is the same as the source text is never a reason
 * to refuse: some product terms stay English on purpose. Only the texts
@@ -211,9 +213,9 @@ METHOD if_ex_cts_request_check~check_before_release.
     CALL FUNCTION 'POPUP_TO_CONFIRM'
       EXPORTING
         titlebar              = 'Translations are missing'
-        text_question         = |{ part_1 }{ part_2 }{ part_3 } Translate them now: in the list (F8), | &&
+        text_question         = |{ part_1 }{ part_2 }{ part_3 } Translate them now: in the list, | &&
                                 |or download them as an Excel file and upload it at the next release. | &&
-                                |Save writes them and records them in { request }.|
+                                |Save writes them and records them in { request }; then release again.|
         text_button_1         = 'Translate now'
         icon_button_1         = 'ICON_CHANGE_TEXT'
         text_button_2         = COND string( WHEN mode = zcl_tr_transl_check=>mode-inform THEN `Release anyway`
@@ -225,29 +227,27 @@ METHOD if_ex_cts_request_check~check_before_release.
       EXCEPTIONS
         OTHERS                = 1.
     IF sy-subrc = 0 AND returncode = '1'.
-      " The selection screen, filled with exactly what is released here:
-      " F8 opens the editable list, or the developer chooses the download
-      " or the upload of the Excel file. Save writes the translations and
-      " records them in the task or request itself, so they are released
-      " and pushed with it.
+      " The editable list of exactly what is released here; its toolbar
+      " has the download and the upload of the Excel file. Save writes
+      " the translations and records them in the task or request itself.
       SUBMIT (zcl_tr_transl_check=>report_name)
-        VIA SELECTION-SCREEN
         WITH p_trkorr = request
         WITH p_edit   = abap_true
         WITH p_target = request
         AND RETURN.
+      " This release stops in any mode: its object list was read before
+      " Save, so it would neither carry nor push the translations just
+      " recorded. The developer releases again.
       TRY.
           findings = NEW zcl_tr_transl_check( )->check_transport_objects( objects ).
-        CATCH cx_root INTO error.
-          MESSAGE |Translation check of { request } did not run: { error->get_text( ) }| TYPE 'I'.
-          RETURN.
+          missing = zcl_tr_transl_check=>count( findings = findings status = zcl_tr_transl_check=>status-missing ).
+        CATCH cx_root ##NO_HANDLER.
+          " Only the wording of the message depends on it.
       ENDTRY.
-      missing = zcl_tr_transl_check=>count( findings = findings status = zcl_tr_transl_check=>status-missing ).
-      IF missing = 0.
-        MESSAGE |{ request }: all texts are translated now| TYPE 'S'.
-        RETURN.
-      ENDIF.
-      part_1 = |{ request }: still { missing } text(s) without translation|.
+      part_1 = COND #( WHEN missing = 0 THEN |{ request }: translations saved.|
+                       ELSE |{ request }: still { missing } text(s) without translation.| ).
+      part_2 = | Release { request } again.|.
+      MESSAGE ID '00' TYPE 'S' NUMBER '001' WITH part_1 part_2 space space RAISING cancel.
     ENDIF.
   ENDIF.
 

@@ -52,10 +52,27 @@
 *& a file: the report checks the objects of the file again, puts the
 *& typed translations into the editable list, and Save writes them.
 *& Nothing is written by the upload itself. Lines whose source text was
-*& changed in the system since the download are left out.
+*& changed in the system since the download are left out. The editable
+*& list has these functions in its toolbar: "Download Excel" writes
+*& the lines of the list (with what is typed so far), "Upload file" puts
+*& the translations of a file into the lines of the list.
+*& CSV files: with "As CSV files" (or "Download CSV" in the toolbar) the
+*& same texts are written as CSV, UTF-8, values in quotes, separated by
+*& semicolons, for a translation tool or a text editor: nothing reformats
+*& a value there, but there is no length check, colour or protection
+*& either. The hardcoded texts go into a second CSV file next to it,
+*& <name>_hardcoded.csv. The upload reads an Excel file or a CSV file.
+*& With "Hardcoded texts" the downloaded file has a second sheet with the
+*& hardcoded texts and two columns for proposals in English and German:
+*& a developer moves them into messages or text symbols; the upload never
+*& reads that sheet.
+*& The column Proposed source text lets a translator propose a better
+*& wording of the source text itself (both cells turn orange). An upload
+*& shows these proposals in a popup list; they are never written, a
+*& developer changes the objects.
 *&
 *& The release check calls this report with "Enter translations" when the
-*& developer chooses "Translate now".
+*& developer chooses "Translate now": the editable list opens at once.
 *& ABAP 7.40 syntax.
 *&---------------------------------------------------------------------*
 REPORT ztr_transl_report.
@@ -105,6 +122,11 @@ PARAMETERS r_down RADIOBUTTON GROUP file.
 SELECTION-SCREEN COMMENT 3(70) t_down FOR FIELD r_down.
 SELECTION-SCREEN END OF LINE.
 SELECTION-SCREEN BEGIN OF LINE.
+SELECTION-SCREEN POSITION 3.
+PARAMETERS p_csv AS CHECKBOX.
+SELECTION-SCREEN COMMENT 5(70) t_csv FOR FIELD p_csv.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN BEGIN OF LINE.
 PARAMETERS r_up RADIOBUTTON GROUP file.
 SELECTION-SCREEN COMMENT 3(70) t_up FOR FIELD r_up.
 SELECTION-SCREEN END OF LINE.
@@ -149,6 +171,7 @@ CLASS lcl_report DEFINITION FINAL.
     TYPES location      TYPE c LENGTH 80.
     TYPES include       TYPE progname.
     TYPES source_line   TYPE i.
+    TYPES hardcoded_kind TYPE zcl_tr_transl_hardcoded=>ty_kind.
     TYPES END OF ty_line.
     TYPES ty_lines TYPE STANDARD TABLE OF ty_line WITH DEFAULT KEY.
 
@@ -164,6 +187,25 @@ CLASS lcl_report DEFINITION FINAL.
     CLASS-DATA original TYPE ty_lines.
     CLASS-DATA check    TYPE REF TO zcl_tr_transl_check.
     CLASS-DATA target   TYPE trkorr.
+    " What the list shows, e.g. the request; part of the file name.
+    CLASS-DATA scope    TYPE string.
+    " Proposed changes of source texts of the last upload, for the popup.
+    CLASS-DATA source_changes TYPE zcl_tr_transl_file=>ty_source_changes.
+
+    " GUI status of the editable list: SAP's STANDARD_FULLSCREEN of
+    " SAPLSLVC_FULLSCREEN with the functions of the Excel file added.
+    CONSTANTS editable_list_status TYPE sypfkey VALUE 'TRANSLATION_LIST'.
+    CONSTANTS:
+      BEGIN OF function,
+        download_excel TYPE sy-ucomm VALUE 'DOWNLOAD_EXCEL',
+        download_csv   TYPE sy-ucomm VALUE 'DOWNLOAD_CSV',
+        upload_file    TYPE sy-ucomm VALUE 'UPLOAD_FILE',
+      END OF function.
+    CONSTANTS:
+      BEGIN OF file_format,
+        excel TYPE string VALUE `xlsx`,
+        csv   TYPE string VALUE `csv`,
+      END OF file_format.
 
     "! The namespaces of the packages under Git, e.g. /MYNS/ for
     "! the pattern /MYNS/*.
@@ -181,10 +223,26 @@ CLASS lcl_report DEFINITION FINAL.
     CLASS-METHODS choose_file
       RETURNING
         VALUE(result) TYPE string.
+    "! The lines of the list that need a translation, as an Excel file or
+    "! as CSV files (FORMAT: a value of FILE_FORMAT).
+    CLASS-METHODS download
+      IMPORTING
+        format TYPE string.
+    "! Toolbar of the editable list: the translations of an Excel or CSV
+    "! file go into the lines of the list. Nothing is written until Save.
+    CLASS-METHODS upload_into_list.
+    "! The proposed changes of source texts of an uploaded file, in a
+    "! popup: they are never written, a developer changes the objects.
+    CLASS-METHODS show_source_changes
+      IMPORTING
+        changes TYPE zcl_tr_transl_file=>ty_source_changes.
     METHODS run.
 
   PRIVATE SECTION.
-    CONSTANTS file_filter TYPE string VALUE `Excel (*.xlsx)|*.xlsx`.
+    CONSTANTS excel_filter TYPE string VALUE `Excel (*.xlsx)|*.xlsx`.
+    CONSTANTS csv_filter TYPE string VALUE `CSV UTF-8 (*.csv)|*.csv`.
+    CONSTANTS upload_filter TYPE string
+      VALUE `Excel or CSV (*.xlsx;*.csv)|*.xlsx;*.csv|Excel (*.xlsx)|*.xlsx|CSV (*.csv)|*.csv`.
 
     CLASS-METHODS set_length
       CHANGING
@@ -212,15 +270,20 @@ CLASS lcl_report DEFINITION FINAL.
         status        TYPE c
       RETURNING
         VALUE(result) TYPE i.
-    METHODS download
-      IMPORTING
-        scope TYPE string.
     METHODS upload.
-    METHODS read_file
+    CLASS-METHODS read_file
       IMPORTING
         file_name     TYPE string
       RETURNING
         VALUE(result) TYPE xstring.
+    "! Writes the file on the front end; false, with a message, when it
+    "! could not be written.
+    CLASS-METHODS write_file
+      IMPORTING
+        file_name     TYPE string
+        content       TYPE xstring
+      RETURNING
+        VALUE(result) TYPE abap_bool.
     METHODS take_over
       IMPORTING
         findings TYPE zcl_tr_transl_check=>ty_findings
@@ -274,7 +337,7 @@ CLASS lcl_report IMPLEMENTATION.
     DATA(pattern) = COND devclass( WHEN p_pack IS INITIAL THEN zcl_tr_auth=>packages( ) ELSE p_pack ).
     check = NEW zcl_tr_transl_check( languages = languages package_pattern = pattern all_texts = p_desc ).
     target = COND #( WHEN p_target IS NOT INITIAL THEN p_target ELSE p_trkorr ).
-    DATA(scope) = ``.
+    CLEAR scope.
     IF p_trkorr IS NOT INITIAL.
       objects = check->objects_in_scope( check->transport_objects( p_trkorr ) ).
       scope = |{ p_trkorr }|.
@@ -294,9 +357,10 @@ CLASS lcl_report IMPLEMENTATION.
 
     add_findings( findings ).
     " Hardcoded texts and table entries cannot be typed in the list or
-    " the file: they are only listed.
+    " the file: they are only listed. The hardcoded texts also go into a
+    " sheet of their own in the downloaded file, for proposals.
     DATA(only_listed) = xsdbool( p_edit = abap_false AND r_down = abap_false ).
-    IF p_hard = abap_true AND only_listed = abap_true.
+    IF p_hard = abap_true AND ( only_listed = abap_true OR r_down = abap_true ).
       add_hardcoded( objects ).
     ENDIF.
     IF p_table = abap_true AND only_listed = abap_true.
@@ -313,13 +377,15 @@ CLASS lcl_report IMPLEMENTATION.
     IF only_listed = abap_true.
       title = |{ title }, { count_status( status-hardcoded ) } hardcoded, | &&
               |{ count_status( status-table_entry ) } table entries|.
+    ELSEIF r_down = abap_true AND p_hard = abap_true.
+      title = |{ title }, { count_status( status-hardcoded ) } hardcoded|.
     ENDIF.
     IF list IS INITIAL.
       MESSAGE |{ title }. Nothing to show| TYPE 'S'.
       RETURN.
     ENDIF.
     IF r_down = abap_true.
-      download( scope ).
+      download( COND #( WHEN p_csv = abap_true THEN file_format-csv ELSE file_format-excel ) ).
     ELSEIF p_edit = abap_true.
       show_editable( title ).
     ELSE.
@@ -361,7 +427,7 @@ CLASS lcl_report IMPLEMENTATION.
                       status = status-hardcoded status_text = |hardcoded: { finding-kind }|
                       text_kind = 'Hardcoded text in the source code'
                       source_text = finding-text include = finding-include source_line = finding-line
-                      location = |{ finding-include } line { finding-line }| ) TO list.
+                      location = |{ finding-include } line { finding-line }| hardcoded_kind = finding-kind ) TO list.
     ENDLOOP.
   ENDMETHOD.
 
@@ -450,12 +516,19 @@ CLASS lcl_report IMPLEMENTATION.
     DATA full_path TYPE string.
     DATA action    TYPE i.
     DATA lines     TYPE zcl_tr_transl_check=>ty_findings.
+    DATA hardcoded TYPE zcl_tr_transl_hardcoded=>ty_findings.
 
-    LOOP AT list INTO DATA(line) WHERE status = zcl_tr_transl_check=>status-missing
-                                    OR status = zcl_tr_transl_check=>status-same_as_source.
-      APPEND CORRESPONDING #( line ) TO lines.
+    LOOP AT list INTO DATA(line).
+      CASE line-status.
+        WHEN zcl_tr_transl_check=>status-missing OR zcl_tr_transl_check=>status-same_as_source.
+          APPEND CORRESPONDING #( line ) TO lines.
+        WHEN status-hardcoded.
+          APPEND VALUE #( object = line-object obj_name = line-obj_name devclass = line-devclass
+                          include = line-include line = line-source_line kind = line-hardcoded_kind
+                          text = line-source_text ) TO hardcoded.
+      ENDCASE.
     ENDLOOP.
-    IF lines IS INITIAL.
+    IF lines IS INITIAL AND hardcoded IS INITIAL.
       MESSAGE 'No text to translate: nothing written' TYPE 'S'.
       RETURN.
     ENDIF.
@@ -467,12 +540,12 @@ CLASS lcl_report IMPLEMENTATION.
     " Namespaces and requests as a file name: /MYNS/ -> _MYNS_.
     DATA(name_part) = scope.
     TRANSLATE name_part USING '/_ _,_:_'.
-    DATA(default_name) = |translations_{ name_part }.xlsx|.
+    DATA(default_name) = |translations_{ name_part }.{ format }|.
     cl_gui_frontend_services=>file_save_dialog(
       EXPORTING
-        default_extension = `xlsx`
+        default_extension = format
         default_file_name = default_name
-        file_filter       = file_filter
+        file_filter       = COND #( WHEN format = file_format-csv THEN csv_filter ELSE excel_filter )
       CHANGING
         filename          = file_name
         path              = path
@@ -484,22 +557,39 @@ CLASS lcl_report IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    DATA(content) = NEW zcl_tr_transl_file( )->to_xlsx( lines ).
-    DATA(binary) = cl_bcs_convert=>xstring_to_solix( content ).
-    cl_gui_frontend_services=>gui_download(
-      EXPORTING
-        bin_filesize = xstrlen( content )
-        filename     = full_path
-        filetype     = 'BIN'
-      CHANGING
-        data_tab     = binary
-      EXCEPTIONS
-        OTHERS       = 1 ).
-    IF sy-subrc <> 0.
-      MESSAGE |The file { full_path } could not be written| TYPE 'S' DISPLAY LIKE 'E'.
+    DATA(file) = NEW zcl_tr_transl_file( ).
+    IF format = file_format-excel.
+      IF write_file( file_name = full_path content = file->to_xlsx( lines = lines hardcoded = hardcoded ) ) = abap_false.
+        RETURN.
+      ENDIF.
+      MESSAGE |{ lines( lines ) } text(s) to translate| &&
+              COND string( WHEN hardcoded IS NOT INITIAL THEN | and { lines( hardcoded ) } hardcoded text(s)| ) &&
+              | written to { full_path }| TYPE 'S'.
       RETURN.
     ENDIF.
-    MESSAGE |{ lines( lines ) } text(s) written to { full_path }| TYPE 'S'.
+
+    " CSV has one table per file: the hardcoded texts go into a second
+    " file next to the first, <name>_hardcoded.csv.
+    DATA(written) = VALUE string_table( ).
+    IF lines IS NOT INITIAL.
+      IF write_file( file_name = full_path content = file->to_csv( lines ) ) = abap_false.
+        RETURN.
+      ENDIF.
+      APPEND |{ lines( lines ) } text(s) to translate written to { full_path }| TO written.
+    ENDIF.
+    IF hardcoded IS NOT INITIAL.
+      DATA(hardcoded_path) = full_path.
+      DATA(extension_at) = find( val = hardcoded_path sub = `.csv` case = abap_false occ = -1 ).
+      IF extension_at > 0.
+        hardcoded_path = substring( val = hardcoded_path len = extension_at ).
+      ENDIF.
+      hardcoded_path = |{ hardcoded_path }_hardcoded.csv|.
+      IF write_file( file_name = hardcoded_path content = file->hardcoded_to_csv( hardcoded ) ) = abap_false.
+        RETURN.
+      ENDIF.
+      APPEND |{ lines( hardcoded ) } hardcoded text(s) to { hardcoded_path }| TO written.
+    ENDIF.
+    MESSAGE concat_lines_of( table = written sep = `, ` ) TYPE 'S'.
   ENDMETHOD.
 
 
@@ -516,7 +606,7 @@ CLASS lcl_report IMPLEMENTATION.
       MESSAGE |The file { p_file } could not be read| TYPE 'S' DISPLAY LIKE 'E'.
       RETURN.
     ENDIF.
-    DATA(file) = NEW zcl_tr_transl_file( )->from_xlsx( content ).
+    DATA(file) = NEW zcl_tr_transl_file( )->from_file( content ).
     IF file-error IS NOT INITIAL.
       MESSAGE file-error TYPE 'S' DISPLAY LIKE 'E'.
       RETURN.
@@ -540,11 +630,13 @@ CLASS lcl_report IMPLEMENTATION.
         taken    = DATA(taken)
         changed  = DATA(changed) ).
     target = COND #( WHEN p_target IS NOT INITIAL THEN p_target ELSE p_trkorr ).
+    scope = COND #( WHEN target IS NOT INITIAL THEN |{ target }| ELSE `upload` ).
 
     DATA(not_found) = lines( file-lines ) - lines( list ) - changed.
     DATA(title) = |{ p_file }: { taken } translation(s) to save| &&
                   COND string( WHEN changed > 0 THEN |, { changed } left out (source text changed)| ) &&
                   COND string( WHEN not_found > 0 THEN |, { not_found } not missing any more| ).
+    show_source_changes( file-source_changes ).
     IF list IS INITIAL.
       MESSAGE |{ title }. Nothing to save| TYPE 'S'.
       RETURN.
@@ -571,6 +663,25 @@ CLASS lcl_report IMPLEMENTATION.
       RETURN.
     ENDIF.
     result = cl_bcs_convert=>solix_to_xstring( it_solix = binary iv_size = length ).
+  ENDMETHOD.
+
+
+  METHOD write_file.
+    DATA(binary) = cl_bcs_convert=>xstring_to_solix( content ).
+    cl_gui_frontend_services=>gui_download(
+      EXPORTING
+        bin_filesize = xstrlen( content )
+        filename     = file_name
+        filetype     = 'BIN'
+      CHANGING
+        data_tab     = binary
+      EXCEPTIONS
+        OTHERS       = 1 ).
+    IF sy-subrc <> 0.
+      MESSAGE |The file { file_name } could not be written| TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    result = abap_true.
   ENDMETHOD.
 
 
@@ -609,6 +720,104 @@ CLASS lcl_report IMPLEMENTATION.
   ENDMETHOD.
 
 
+  METHOD upload_into_list.
+    DATA taken     TYPE i.
+    DATA changed   TYPE i.
+    DATA not_found TYPE i.
+
+    DATA(file_name) = choose_file( ).
+    IF file_name IS INITIAL.
+      RETURN.
+    ENDIF.
+    DATA(content) = read_file( file_name ).
+    IF content IS INITIAL.
+      MESSAGE |The file { file_name } could not be read| TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    DATA(file) = NEW zcl_tr_transl_file( )->from_file( content ).
+    IF file-error IS NOT INITIAL.
+      MESSAGE file-error TYPE 'S' DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+
+    " A translation of the file goes into the line of the same text, if
+    " the source text is still the same. Lines of the file that are not in
+    " the list (translated meanwhile, or another scope) are left out.
+    LOOP AT file-lines INTO DATA(uploaded) WHERE target_text IS NOT INITIAL.
+      READ TABLE list ASSIGNING FIELD-SYMBOL(<line>) WITH KEY custmnr  = uploaded-custmnr
+                                                              lxe_type = uploaded-lxe_type
+                                                              lxe_name = uploaded-lxe_name
+                                                              text_key = uploaded-text_key
+                                                              language = uploaded-language.
+      IF sy-subrc <> 0.
+        not_found = not_found + 1.
+        CONTINUE.
+      ENDIF.
+      IF uploaded-source_text <> <line>-source_text.
+        changed = changed + 1.
+        CONTINUE.
+      ENDIF.
+      IF uploaded-target_text <> <line>-target_text.
+        <line>-target_text = uploaded-target_text.
+        set_length( CHANGING line = <line> ).
+        taken = taken + 1.
+      ENDIF.
+    ENDLOOP.
+
+    show_source_changes( file-source_changes ).
+    MESSAGE |{ taken } translation(s) taken from the file, Save writes them| &&
+            COND string( WHEN changed > 0 THEN |; { changed } left out (source text changed)| ) &&
+            COND string( WHEN not_found > 0 THEN |; { not_found } not in the list| ) TYPE 'S'.
+  ENDMETHOD.
+
+
+  METHOD show_source_changes.
+    DATA table TYPE REF TO cl_salv_table.
+
+    IF changes IS INITIAL OR sy-batch = abap_true.
+      RETURN.
+    ENDIF.
+    source_changes = changes.
+    TRY.
+        cl_salv_table=>factory(
+          IMPORTING
+            r_salv_table = table
+          CHANGING
+            t_table      = source_changes ).
+      CATCH cx_salv_msg INTO DATA(error).
+        MESSAGE error TYPE 'S' DISPLAY LIKE 'E'.
+        RETURN.
+    ENDTRY.
+
+    table->get_functions( )->set_all( abap_true ).
+    table->get_display_settings( )->set_list_header(
+      CONV lvc_title( |{ lines( changes ) } proposed change(s) of source texts: not written, | &&
+                      |for a developer (export the list)| ) ).
+    DATA(columns) = table->get_columns( ).
+    columns->set_optimize( abap_true ).
+    TRY.
+        columns->get_column( 'TEXT_KIND' )->set_long_text( 'Kind of text' ).
+        columns->get_column( 'TEXT_KIND' )->set_medium_text( 'Kind of text' ).
+        columns->get_column( 'TEXT_KIND' )->set_short_text( 'Kind' ).
+        columns->get_column( 'SOURCE_TEXT' )->set_long_text( 'Source text now' ).
+        columns->get_column( 'SOURCE_TEXT' )->set_medium_text( 'Source text now' ).
+        columns->get_column( 'SOURCE_TEXT' )->set_short_text( 'Source' ).
+        columns->get_column( 'PROPOSED' )->set_long_text( 'Proposed source text' ).
+        columns->get_column( 'PROPOSED' )->set_medium_text( 'Proposed' ).
+        columns->get_column( 'PROPOSED' )->set_short_text( 'Proposed' ).
+        columns->get_column( 'LXE_TYPE' )->set_long_text( 'SE63 object type' ).
+        columns->get_column( 'LXE_TYPE' )->set_medium_text( 'SE63 type' ).
+        columns->get_column( 'LXE_TYPE' )->set_short_text( 'SE63 type' ).
+        columns->get_column( 'LXE_NAME' )->set_long_text( 'SE63 object name' ).
+        columns->get_column( 'LXE_NAME' )->set_medium_text( 'SE63 name' ).
+        columns->get_column( 'LXE_NAME' )->set_short_text( 'SE63 name' ).
+      CATCH cx_salv_not_found ##NO_HANDLER.
+    ENDTRY.
+    table->set_screen_popup( start_column = 5 end_column = 160 start_line = 3 end_line = 25 ).
+    table->display( ).
+  ENDMETHOD.
+
+
   METHOD choose_file.
     DATA files  TYPE filetable.
     DATA rc     TYPE i.
@@ -616,8 +825,7 @@ CLASS lcl_report IMPLEMENTATION.
 
     cl_gui_frontend_services=>file_open_dialog(
       EXPORTING
-        default_extension = `xlsx`
-        file_filter       = file_filter
+        file_filter       = upload_filter
       CHANGING
         file_table        = files
         rc                = rc
@@ -686,6 +894,7 @@ CLASS lcl_report IMPLEMENTATION.
         columns->get_column( 'LENGTH_STATUS' )->set_technical( abap_true ).
         columns->get_column( 'INCLUDE' )->set_technical( abap_true ).
         columns->get_column( 'SOURCE_LINE' )->set_technical( abap_true ).
+        columns->get_column( 'HARDCODED_KIND' )->set_technical( abap_true ).
       CATCH cx_salv_not_found ##NO_HANDLER.
     ENDTRY.
 
@@ -696,8 +905,9 @@ CLASS lcl_report IMPLEMENTATION.
 
   METHOD show_editable.
     " Classic ALV grid: only it lets a column be typed in without a
-    " screen of its own. Save (the standard button) calls form USER_COMMAND;
-    " leaving a changed cell calls form DATA_CHANGED.
+    " screen of its own. Form SET_STATUS sets the GUI status with the Excel
+    " functions; Save and these functions call form USER_COMMAND; leaving
+    " a changed cell calls form DATA_CHANGED.
     DATA catalog TYPE lvc_t_fcat.
     DATA layout  TYPE lvc_s_layo.
 
@@ -726,16 +936,17 @@ CLASS lcl_report IMPLEMENTATION.
 
     CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
       EXPORTING
-        i_callback_program      = sy-repid
-        i_callback_user_command = 'USER_COMMAND'
-        is_layout_lvc           = layout
-        it_fieldcat_lvc         = catalog
-        it_events               = VALUE slis_t_event( ( name = 'DATA_CHANGED' form = 'DATA_CHANGED' ) )
-        i_grid_settings         = VALUE lvc_s_glay( edt_cll_cb = abap_true )
+        i_callback_program       = sy-repid
+        i_callback_pf_status_set = 'SET_STATUS'
+        i_callback_user_command  = 'USER_COMMAND'
+        is_layout_lvc            = layout
+        it_fieldcat_lvc          = catalog
+        it_events                = VALUE slis_t_event( ( name = 'DATA_CHANGED' form = 'DATA_CHANGED' ) )
+        i_grid_settings          = VALUE lvc_s_glay( edt_cll_cb = abap_true )
       TABLES
-        t_outtab                = list
+        t_outtab                 = list
       EXCEPTIONS
-        OTHERS                  = 1.
+        OTHERS                   = 1.
     IF sy-subrc <> 0.
       MESSAGE 'The list could not be shown' TYPE 'S' DISPLAY LIKE 'E'.
     ENDIF.
@@ -843,12 +1054,23 @@ CLASS lcl_report IMPLEMENTATION.
 ENDCLASS.
 
 
-" Callback of the editable ALV (REUSE_ALV_GRID_DISPLAY_LVC): Save.
+" Callback of the editable ALV (REUSE_ALV_GRID_DISPLAY_LVC): its GUI
+" status, the standard one with the functions of the Excel file.
+FORM set_status USING excluded TYPE slis_t_extab.
+  SET PF-STATUS lcl_report=>editable_list_status EXCLUDING excluded.
+ENDFORM.
+
+
+" Callback of the editable ALV: Save, Download Excel, Download CSV,
+" Upload file.
 FORM user_command USING command TYPE sy-ucomm
                         field   TYPE slis_selfield.
   DATA grid TYPE REF TO cl_gui_alv_grid.
 
-  IF command <> '&DATA_SAVE'.
+  IF command <> '&DATA_SAVE' AND
+     command <> lcl_report=>function-download_excel AND
+     command <> lcl_report=>function-download_csv AND
+     command <> lcl_report=>function-upload_file.
     RETURN.
   ENDIF.
   " Take over what was typed into the grid.
@@ -858,7 +1080,18 @@ FORM user_command USING command TYPE sy-ucomm
   IF grid IS BOUND.
     grid->check_changed_data( ).
   ENDIF.
-  lcl_report=>save( ).
+  CASE command.
+    WHEN lcl_report=>function-download_excel.
+      lcl_report=>download( lcl_report=>file_format-excel ).
+      RETURN.
+    WHEN lcl_report=>function-download_csv.
+      lcl_report=>download( lcl_report=>file_format-csv ).
+      RETURN.
+    WHEN lcl_report=>function-upload_file.
+      lcl_report=>upload_into_list( ).
+    WHEN OTHERS.
+      lcl_report=>save( ).
+  ENDCASE.
   field-refresh    = abap_true.
   field-row_stable = abap_true.
   field-col_stable = abap_true.
@@ -880,16 +1113,17 @@ INITIALIZATION.
   t_editb  = 'Translate in the list'.
   t_edit   = 'Enter translations: Save writes them as SE63 does'.
   t_target = 'Record in (empty: task or request above)'.
-  t_fileb  = 'Excel file'.
+  t_fileb  = 'Excel or CSV file'.
   t_list   = 'No file: show the list'.
   t_down   = 'Download the texts to translate as an Excel file'.
-  t_up     = 'Upload a translated Excel file into the editable list'.
+  t_csv    = 'As CSV files instead (UTF-8, separated by semicolons)'.
+  t_up     = 'Upload a translated Excel or CSV file into the editable list'.
   t_file   = 'File to upload'.
   t_show   = 'Show also'.
   t_same   = 'Translations that are the same as the source text'.
   t_unread = 'Objects that SE63 could not read'.
   t_desc   = 'Also descriptions that only developers see'.
-  t_hard   = 'Hardcoded texts in the source code (only in the list)'.
+  t_hard   = 'Hardcoded texts in the source code (list, own sheet or CSV file)'.
   t_table  = 'Entries of text tables without translation (only in the list)'.
 
   LOOP AT lcl_report=>default_namespaces( ) INTO DATA(g_default).

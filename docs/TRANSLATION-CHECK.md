@@ -52,10 +52,10 @@ The objects run on 7.40 and on S/4HANA unchanged. The XCO library (`XCO_CP_I18N`
 | Object | What it does |
 |---|---|
 | Class `ZCL_TR_TRANSL_CHECK` | The check: settings, objects of a task or request, of packages or of a namespace, findings, the length rule of a translation |
-| Class `ZCL_TR_TRANSL_FILE` | The missing texts as an Excel file (.xlsx) and back, built with `CL_ABAP_ZIP` and read with iXML |
+| Class `ZCL_TR_TRANSL_FILE` | The missing texts as an Excel file (.xlsx) or as CSV files (UTF-8, `;`), and back; the Excel file is built with `CL_ABAP_ZIP` and read with iXML |
 | Class `ZCL_TR_TRANSL_HARDCODED` | Hardcoded texts: literals in the source code that the user sees |
 | Class `ZCL_TR_TRANSL_TABLE_TEXTS` | Entries of tables with a language key that exist in one required language and not in another |
-| Report `ZTR_TRANSL_REPORT` | The list of the findings ("run all"), ALV; with "Enter translations" the translations are typed into the list and saved, written as SE63 does and recorded in the request; download and upload of the Excel file |
+| Report `ZTR_TRANSL_REPORT` | The list of the findings ("run all"), ALV; with "Enter translations" the translations are typed into the list and saved, written as SE63 does and recorded in the request; download and upload of the Excel file, from the selection screen or with the buttons of the editable list (own GUI status `TRANSLATION_LIST`, a copy of `STANDARD_FULLSCREEN` of `SAPLSLVC_FULLSCREEN`) |
 | BAdI implementation `ZTR_TRANSL_CHECK` (`CTS_REQUEST_CHECK`), class `ZCL_IM_TR_TRANSL_CHECK` | The check at the release of a task or request |
 | Report `ZTR_SETUP`, block "Translation check at release" | Writes the settings and shows their state |
 
@@ -82,9 +82,9 @@ A language is added later by adding a row to `ZTR_TRANSL_LANGUAGES` (in `ZTR_SET
 | Namespaces (run all) | every object whose name starts with one of them, in any package that is not local. Filled with the namespaces of the package pattern, for example `/MYNS/` for `/MYNS/*` |
 | Packages (if no namespace) | every object of the packages that match the pattern |
 | Languages | empty: the required languages from STVARV |
-| Show also | translations that are the same as the source text; objects SE63 could not read; descriptions that only developers see (see "Which texts"); hardcoded texts and table entries (both ticked by default, only in the list without "Enter translations") |
+| Show also | translations that are the same as the source text; objects SE63 could not read; descriptions that only developers see (see "Which texts"); hardcoded texts and table entries (both ticked by default, only in the list without "Enter translations"; the hardcoded texts also go into the sheet "Hardcoded texts" of the downloaded file) |
 | Enter translations | the column Translation can be typed in; Save writes the translations |
-| Excel file | "No file" shows the list; "Download" writes the texts to translate as an .xlsx file; "Upload" reads a translated file into the editable list (see "Translating in an Excel file") |
+| Excel or CSV file | "No file" shows the list; "Download" writes the texts to translate as an .xlsx file, or with "As CSV files" as CSV files; "Upload" reads a translated Excel or CSV file into the editable list (see "Translating in an Excel file") |
 | Record in | the task or request the translations are recorded in, so that they are transported. Empty: the task or request above. With neither, Save asks for a request (standard dialog of the transport organizer); Cancel there writes nothing |
 
 The first of task, namespaces, packages that is filled is used. Without "Enter translations" nothing is changed by the report. The title of the list counts the missing texts and the texts that are the same as the source.
@@ -107,10 +107,12 @@ For a translator without SAP access, or to translate with AI:
 1. `ZTR_TRANSL_REPORT` with the scope (task, namespaces or packages), "Download the texts to translate as an Excel file". The file has one line per missing text (and per text that is the same as its source, with "Show also"): type, object, kind of text, target language, source text, Translation, Max. length, Length, Length check.
 2. Only the column Translation can be typed in: the sheet is protected (without password). Length (`=LEN`) and Length check are formulas, a text that is too long turns red, and Excel warns when one is entered. The columns that find the text again in SAP (SE63 type and name, text key, customer number, language key) are hidden; do not change them.
 3. Translate. With AI: give it the file and the glossary (`github-templates/translation-glossary.md`, adapted to your product), and tell it to respect Max. length.
-4. `ZTR_TRANSL_REPORT`, "Upload a translated Excel file into the editable list", the file, "Record in" = the request. The report checks the objects of the file again and opens the editable list with the translations of the file in it. Nothing is written yet.
+4. `ZTR_TRANSL_REPORT`, "Upload a translated Excel or CSV file into the editable list", the file, "Record in" = the request. The report checks the objects of the file again and opens the editable list with the translations of the file in it. Nothing is written yet.
 5. Check the list (lights), correct what is needed, Save. Saving is exactly as in "Translating in the list".
 
 A line whose source text was changed in SAP since the download is left out; a text that was translated in the meantime is not in the list any more. The title of the list counts both.
+
+For a translation tool or a text editor, "As CSV files" (toolbar of the editable list: "Download CSV") writes the same lines as CSV instead. The format is UTF-8 with byte order mark, every value in quotes, separated by semicolons. The hardcoded texts go into a second file, `<name>_hardcoded.csv`. CSV has no formulas, colours or protection. The upload decides by the content: a ZIP file is read as Excel, anything else as CSV in UTF-8, with semicolons, commas or tabs as separator. The columns are found by their heading, as in the Excel file.
 
 Long texts (documentation) cannot be typed in the list; translate them in SE63.
 
@@ -146,7 +148,7 @@ Tables with a language in their key (text tables of customizing, templates per l
 
 **From ADT.** ADT shows no popup and no message of a release that goes on. In mode `INFORM` a developer who releases from ADT therefore sees the missing texts only in the pull request: the Git push adds a section "Missing translations" to its description (see [WORKFLOW.md](WORKFLOW.md)). In mode `BLOCK` and with `#DELIVERY` ADT shows the error message of the refusal; "Translate now" is not available there: run `ZTR_TRANSL_REPORT` in SAP GUI with the task, translate, Save, and release again.
 
-"Translate now" opens the selection screen of `ZTR_TRANSL_REPORT` for exactly what is being released, with "Enter translations" ticked and "Record in" = the task or request being released. F8 shows the editable list; or the developer downloads the texts as an Excel file and, at the next release, uploads the translated file there (see TRANSLATION-GUIDE.md, "Way C"). After the report is left, the check runs again: when nothing is missing any more, the release goes on by itself, and the translations are released and pushed to GitHub together with the task.
+"Translate now" opens the editable list of `ZTR_TRANSL_REPORT` for exactly what is being released, with "Record in" = the task or request being released. The translations are typed into the list; or the developer downloads the texts as an Excel file with **Download Excel** in the toolbar of the list and, at the next release, puts the translated file into the list with **Upload Excel** (see TRANSLATION-GUIDE.md, "Way C"). When the list is left, this release stops, in every mode, with the message "<request>: translations saved. Release <request> again." (or how many texts are still missing). It has to: the release works on the object list it read before Save, so it would neither carry nor push the translations just recorded. The developer releases again; with everything translated the check passes, and the translations are released and pushed to GitHub together with the task.
 
 When a request (not a task) is released and translated this way, the translations land in the request itself. The Git release check then sees files that are not reviewed yet, pushes them to the review branch and refuses the release once; release it again after the approval. Translating at the release of the task avoids that.
 

@@ -11,11 +11,11 @@ The examples use German (`D`) and English (`E`) as the required languages; any o
 | Way | When | What you do |
 |---|---|---|
 | **A. In the list** | you work in SAP GUI and have a few dozen texts | tick "Enter translations", type the translations into the list, Save |
-| **B. Excel file** | many texts, a translator without SAP, or translating with AI | Download, fill the file, Upload, check the list, Save |
+| **B. Excel or CSV file** | many texts, a translator without SAP, a translation tool, or translating with AI | Download, fill the file, Upload, check the list, Save |
 
 Both end the same way: **Save** writes the translations exactly as SE63 does and records them in your request, so that they are transported. Nothing is written before Save.
 
-A third way finds you by itself: when you release a task with missing texts, the release check offers "Translate now", which opens the report for exactly that task, ready for way A or way B.
+A third way finds you by itself: when you release a task with missing texts, the release check offers "Translate now", which opens the editable list of exactly that task, with the buttons of way B in its toolbar.
 
 ## Before you start
 
@@ -35,7 +35,7 @@ A third way finds you by itself: when you release a task with missing texts, the
    - *Namespaces*: everything (for example `/MYNS/`), takes minutes.
 3. *Languages*: leave empty (the required languages from the settings), or type the languages you want.
 4. Block **Translate in the list**: tick *Enter translations*. *Record in*: your request.
-5. Block **Excel file**: leave *No file: show the list*.
+5. Block **Excel or CSV file**: leave *No file: show the list*.
 6. F8. The list shows one line per missing text and language:
 
    | Column | Meaning |
@@ -59,8 +59,12 @@ Texts you do not want to translate yet: leave the cell empty. Only typed cells a
 ### 1. Download
 
 1. `ZTR_TRANSL_REPORT`, the same selection as in way A, steps 2 and 3. *Enter translations* is not needed for the download.
-2. Block **Excel file**: *Download the texts to translate as an Excel file*. F8.
+2. Block **Excel or CSV file**: *Download the texts to translate as an Excel file*. For CSV files instead, also tick *As CSV files instead* (see "CSV instead of Excel" below). F8.
 3. Choose where to save the file. The message says how many texts it holds.
+
+With *Hardcoded texts in the source code* ticked under **Show also** (the default), the file has a second sheet, **Hardcoded texts**: one line per text written directly in the code, with type, object, include, line, kind and the text, and two columns to fill, *Proposed English* and *Proposed German*. These texts cannot be uploaded: a developer moves each one into a message or a text symbol (see "Fixing hardcoded texts") and uses the proposals for its texts. The upload reads only the first sheet.
+
+**All texts of a product line in one file:** leave *Task or request* empty and keep one namespace in *Namespaces*, for example only `/MYNS/`, then a second run with only `/MYNSREP/`. A whole namespace takes a few minutes.
 
 ### 2. Fill the file
 
@@ -70,15 +74,17 @@ The file has one line per missing text and language:
 |---|---|
 | Type, Object | where the text belongs |
 | Kind of text | where the text appears (message, field label, dropdown value, ...), see "Kinds of text" |
-| Language | the language to translate into (EN, DE, ...) |
+| Source language | the language the source text is written in (DE, EN, ...) |
 | Source text | the text to translate |
-| **Translation** | the only column you can type in (yellow) |
+| Proposed source text | optional: a better wording of the source text itself (yellow, can be typed in) |
+| Target language | the language to translate into (EN, DE, ...) |
+| **Translation** | the translation (yellow, can be typed in) |
 | Max. length | the limit for this text |
 | Length, Length check | filled by Excel: `OK` or `Too long by N`; a text that is too long turns red, and Excel warns when you enter one |
 
 Rules:
 
-- Type only into **Translation**. The sheet is protected so that nothing else changes; the hidden columns find the text again in SAP. Do not unprotect the sheet, do not add, delete or sort rows by copying them elsewhere. Filtering by Language is fine.
+- Type only into **Translation** and, when needed, **Proposed source text**. The sheet is protected so that nothing else changes; the hidden columns find the text again in SAP. Do not unprotect the sheet, do not add, delete or sort rows by copying them elsewhere. Filtering by Target language is fine.
 - Leave a cell empty if you do not translate that text; it is skipped.
 - Keep placeholders exactly as they are: `&1`, `&2`, `&`, `%1`.
 - Use the terms of your glossary (template: [github-templates/translation-glossary.md](../github-templates/translation-glossary.md)). Product names and some product terms stay untranslated on purpose.
@@ -86,16 +92,35 @@ Rules:
 
 **With AI** (Claude, Copilot, ...): give it the file and the glossary, and ask for example:
 
-> Fill the column "Translation" of this Excel file. Translate the column "Source text" into the language in the column "Language". Respect "Max. length" (number of characters) for each line; if the text does not fit, shorten it without losing the meaning. Keep placeholders such as &1 and & unchanged. Use the glossary for product terms; terms listed as staying untranslated stay as they are. Formal address. Do not change any other column and do not add or remove rows. Return the file as .xlsx.
+> Fill the column "Translation" of this Excel file. Translate the column "Source text" (written in the language of the column "Source language") into the language in the column "Target language". Respect "Max. length" (number of characters) for each line; if the text does not fit, shorten it without losing the meaning. Keep placeholders such as &1 and & unchanged. Use the glossary for product terms; terms listed as staying untranslated stay as they are. Formal address. If a source text has a typo or an unclear wording, write the corrected source text into "Proposed source text" on that line. Do not change any other column and do not add or remove rows. Return the file as .xlsx.
 
 Then read the result before uploading: the AI is the translator, you are the reviewer.
 
+### CSV instead of Excel
+
+Excel can change a value it thinks it recognises, for example a date or a number. The Excel file of the report prevents that: every cell is text. A translation tool (Trados, memoQ, Phrase, ...) or a text editor often works better with CSV. With *As CSV files instead* (or **Download CSV** in the toolbar of the editable list) the report writes:
+
+- `translations_<scope>.csv`: the same columns as the Excel file, without Length and Length check, and with every column visible (the last five find the text again in SAP: do not change them);
+- `translations_<scope>_hardcoded.csv` next to it, when there are hardcoded texts: the columns of the sheet "Hardcoded texts".
+
+The files are UTF-8 with byte order mark. Every value is in quotes, and the values are separated by semicolons. A CSV file has no colours, no length check and no protection. So check Max. length yourself, and change only *Translation* and *Proposed source text*.
+
+**Do not open a CSV file in Excel by double-click.** That is exactly when Excel changes values (dates, leading zeros, text starting with `=`) and can break umlauts. To look at it in Excel anyway, use *Data > From Text/CSV*, set every column to Text, and save it again as *CSV UTF-8*. Better: use the Excel file in Excel.
+
+The upload reads both formats: an `.xlsx` file, or a CSV file in UTF-8 separated by semicolons, commas or tabs.
+
+**When the source text itself is wrong** (a typo, an unclear wording, a term outside the glossary): type the better wording into **Proposed source text** on that line. As soon as it differs from the source text, both cells turn orange, so every proposed change is visible; filter the column *Proposed source text* to see only those lines. A proposal longer than Max. length turns red.
+
+A proposal is **never written** by the upload: the source text belongs to the object (the message, the program, the data element) in its original language, and changing it is a change of the object. The upload shows the proposals in a popup list (Object, Kind of text, Source text now, Proposed source text), once per text, also when it was typed on the line of each target language. Export that list (button of the list) and give it to a developer, who changes the objects in a task: SE91 for a message, the text elements for a program or class, and so on, logged on in the source language. After that change the existing translations of that text must be checked by hand, because they were made for the old wording; the report does not list them, since they are not missing.
+
 ### 3. Upload and save
 
-1. `ZTR_TRANSL_REPORT`. Block **Excel file**: *Upload a translated Excel file into the editable list*, *File to upload*: the file (F4 opens the file dialog). *Record in*: your request.
+1. `ZTR_TRANSL_REPORT`. Block **Excel or CSV file**: *Upload a translated Excel or CSV file into the editable list*, *File to upload*: the file (F4 opens the file dialog). *Record in*: your request.
 2. F8. The report checks the objects of the file again and opens the editable list, already filled with the translations of the file. **Nothing is written yet.**
 3. Look at the list: lights, texts. Correct a cell if needed.
 4. **Save**. From here it is exactly way A, step 8.
+
+**From the list itself.** The editable list (way A) has three buttons in its toolbar: **Download Excel** and **Download CSV** write the lines of the list as the file of step 1, with what you have typed so far; **Upload file** asks for an Excel or CSV file and puts its translations into the lines of the list. As above, nothing is written until Save; the message says how many translations were taken, how many were left out because the source text changed, and how many are not in the list.
 
 The title of the list tells you what happened to the file:
 
@@ -132,15 +157,15 @@ The column *Kind of text* says where a text appears, so that it can be worded fo
 
 ## Way C: at release
 
-When the check at release is switched on (mode INFORM or BLOCK) and you release a task with missing texts, a popup names them and offers **Translate now**. It opens the selection screen of the report, already filled: *Task or request* and *Record in* = what you release, *Enter translations* ticked. Then:
+When the check at release is switched on (mode INFORM or BLOCK) and you release a task with missing texts, a popup names them and offers **Translate now**. It opens the editable list of the missing texts of what you release; Save records the translations in it. Then:
 
-- **In the list:** F8, translate, Save, leave the list (Back). The check runs again, and the release goes on when nothing is missing any more.
-- **With an Excel file** (many texts, or AI):
-  1. Choose *Download the texts to translate as an Excel file*, F8, save the file. Back: the release is refused in mode BLOCK (in INFORM it goes on), because the texts are still missing.
+- **In the list:** translate, Save, leave the list (Back). The release stops with "translations saved. Release ... again": release again, and the check passes.
+- **With an Excel or CSV file** (many texts, a translation tool, or AI):
+  1. **Download Excel** (or **Download CSV**) in the toolbar of the list, save the file. Back: the release is refused in mode BLOCK (in INFORM it goes on), because the texts are still missing.
   2. Fill the file as in way B.
-  3. Release again, **Translate now**, choose *Upload a translated Excel file into the editable list* and the file, F8. Check the list, Save, Back. Nothing is missing any more, and the release goes on by itself.
+  3. Release again, **Translate now**, **Upload file** and the file. Check the list, Save, Back. Release once more: nothing is missing any more, and the release goes through.
 
-Back on the selection screen without F8 changes nothing; the check runs again as before. Releasing from ADT shows no popup: see [TRANSLATION-CHECK.md](TRANSLATION-CHECK.md), "At release".
+After "Translate now" the release always stops, also when you leave the list without Save; release again when you are ready. The release that comes back from the list cannot go on, because it would not carry the translations just saved. Details: [TRANSLATION-CHECK.md](TRANSLATION-CHECK.md), "At release".
 
 ## Hardcoded texts and table entries
 
@@ -177,7 +202,7 @@ After the code change:
 
 ### With AI
 
-Export the hardcoded lines from the list (ALV, Export, Spreadsheet), and give the AI the list together with read access to the system (or the sources of the objects) and these rules. Example prompt:
+Give the AI the sheet **Hardcoded texts** of the downloaded file (or export the hardcoded lines from the list: ALV, Export, Spreadsheet) together with read access to the system (or the sources of the objects) and these rules. The AI can also fill *Proposed English* and *Proposed German* in that sheet. Example prompt:
 
 > For each line of this list (object, include, line, text), read the source at that line and propose the change that makes the text translatable, following the rules in docs/TRANSLATION-GUIDE.md, "Fixing hardcoded texts". Prefer an existing message of the message class the program uses; propose a new message only when none fits, with its text in every required language and the next free number. For TYPE 'X' keep the dump unless told otherwise. Do not change anything on the system: return one proposal per line with the old statement, the new statement, the message or text symbol to create (with all texts), and a one-line reason. Mark lines you would leave as they are, with the reason.
 
@@ -209,7 +234,8 @@ Then review every proposal like any code change, apply it in your task, enter th
 | `... Nothing to show` | nothing is missing for that selection; check that "Namespaces" is empty when you select packages |
 | `No translation was typed` | Save found no typed cell |
 | `...: 0 translation(s) to save ... Nothing to save` (upload) | the file has no line with a translation for a text that is still missing |
-| `The file is not an Excel file (.xlsx)` | save the file as .xlsx in Excel, not as .xls or .csv |
+| `The file is not an Excel file (.xlsx)` | the .xlsx file is damaged; save it again in Excel as .xlsx (not .xls) |
+| `The file is not in UTF-8: save it as "CSV UTF-8" ...` | the CSV file was saved in another code page; save it as *CSV UTF-8* (Excel) or with encoding UTF-8 (text editor, translation tool) |
 | `The file has no column "Translation" ...` | the file is not one from the download; download again |
 | popup after Save: `N translation(s) written, M not` | the popup names the first problem: usually a text that is too long |
 
