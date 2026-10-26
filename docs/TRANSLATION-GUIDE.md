@@ -170,17 +170,19 @@ When the check at release is switched on (mode INFORM or BLOCK) and you release 
 
 After "Translate now" the release always stops, also when you leave the list without Save; release again when you are ready. The release that comes back from the list cannot go on, because it would not carry the translations just saved. Details: [TRANSLATION-CHECK.md](TRANSLATION-CHECK.md), "At release".
 
-## Hardcoded texts and table entries
+## Hardcoded texts, table entries and UI5 apps
 
-Without *Enter translations* and without a file, the list also shows two kinds of lines that cannot be translated by typing:
+Without *Enter translations* and without a file, the list also shows three kinds of lines that cannot be translated by typing:
 
 | Status | What it is | What to do |
 |---|---|---|
 | `hardcoded: message`, `hardcoded: screen text`, ... | a text written directly in the source code, e.g. `MESSAGE 'No entries selected' TYPE 'E'`. SAP cannot translate it | a developer moves it into a message of the message class or a text symbol, then it is translated like any other text. Double-click the line: the source opens at the line (column Where) |
 | `hardcoded: text constant` | a constant with words in it | check whether a user sees it; many are technical and stay |
 | `table entry missing EN` | an entry of a text table (column Where = its key) exists in one language but not in English | translate it in the maintenance view (SM30) logged on in English, or in SE63, and record it in the request |
+| `UI5 file missing DE` | a UI5 app (object `WAPA`) has no German text at all: neither the file (column Where = the file it needs, e.g. `i18n/i18n_de.properties`) nor a translation in SE63 | add the file to the repository of the app with every key of `i18n.properties` translated and deploy the app again, or translate the app in SE63 |
+| `UI5 text missing DE` | the German file and SE63 both lack a text for a key; column Where = key and file | add the translation to that file and deploy again, or translate it in SE63 |
 
-Uncheck *Hardcoded texts* and *Entries of text tables* under **Show also** to hide them.
+Uncheck *Hardcoded texts*, *Entries of text tables* and *Texts of UI5 apps* under **Show also** to hide them.
 
 ## Fixing hardcoded texts
 

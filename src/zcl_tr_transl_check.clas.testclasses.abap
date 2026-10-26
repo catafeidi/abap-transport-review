@@ -289,3 +289,44 @@ CLASS ltc_text_kind IMPLEMENTATION.
   ENDMETHOD.
 
 ENDCLASS.
+
+" The texts of UI5 apps count at release like the other missing texts.
+CLASS ltc_ui5_texts DEFINITION FINAL FOR TESTING
+  RISK LEVEL HARMLESS
+  DURATION SHORT.
+
+  PRIVATE SECTION.
+    METHODS missing_text_of_an_app FOR TESTING.
+    METHODS missing_file_of_an_app FOR TESTING.
+ENDCLASS.
+
+
+CLASS ltc_ui5_texts IMPLEMENTATION.
+
+  METHOD missing_text_of_an_app.
+    DATA(findings) = zcl_tr_transl_check=>from_ui5_findings( VALUE #(
+      ( application = 'ZAPP' devclass = 'ZPACKAGE' file = `i18n/i18n_de.properties` language = 'D'
+        source_language = 'E' text_key = `save` source_text = `Save`
+        problem = zcl_tr_transl_ui5=>problem-text_missing ) ) ).
+    cl_abap_unit_assert=>assert_equals( act = lines( findings ) exp = 1 ).
+    DATA(finding) = findings[ 1 ].
+    cl_abap_unit_assert=>assert_equals( act = finding-object exp = 'WAPA' ).
+    cl_abap_unit_assert=>assert_equals( act = finding-obj_name exp = 'ZAPP' ).
+    cl_abap_unit_assert=>assert_equals( act = finding-status exp = zcl_tr_transl_check=>status-missing ).
+    cl_abap_unit_assert=>assert_equals( act = finding-language exp = 'D' ).
+    cl_abap_unit_assert=>assert_equals( act = finding-text_key exp = 'save' ).
+    cl_abap_unit_assert=>assert_equals( act = finding-source_text exp = 'Save' ).
+    cl_abap_unit_assert=>assert_equals( act = finding-lxe_name exp = 'i18n/i18n_de.properties' ).
+    cl_abap_unit_assert=>assert_equals( act = finding-text_kind exp = 'Text of a UI5 app (i18n file)' ).
+  ENDMETHOD.
+
+
+  METHOD missing_file_of_an_app.
+    DATA(findings) = zcl_tr_transl_check=>from_ui5_findings( VALUE #(
+      ( application = 'ZAPP' file = `i18n/i18n_de.properties` language = 'D' source_language = 'E'
+        source_text = `5 text(s) to translate` problem = zcl_tr_transl_ui5=>problem-file_missing ) ) ).
+    cl_abap_unit_assert=>assert_equals( act = findings[ 1 ]-status exp = zcl_tr_transl_check=>status-missing ).
+    cl_abap_unit_assert=>assert_initial( findings[ 1 ]-text_key ).
+  ENDMETHOD.
+
+ENDCLASS.

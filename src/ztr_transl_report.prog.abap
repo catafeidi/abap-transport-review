@@ -157,6 +157,10 @@ SELECTION-SCREEN BEGIN OF LINE.
 PARAMETERS p_table AS CHECKBOX DEFAULT 'X'.
 SELECTION-SCREEN COMMENT 3(70) t_table FOR FIELD p_table.
 SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN BEGIN OF LINE.
+PARAMETERS p_ui5 AS CHECKBOX DEFAULT 'X'.
+SELECTION-SCREEN COMMENT 3(70) t_ui5 FOR FIELD p_ui5.
+SELECTION-SCREEN END OF LINE.
 SELECTION-SCREEN END OF BLOCK show.
 
 CLASS lcl_report DEFINITION FINAL.
@@ -168,7 +172,7 @@ CLASS lcl_report DEFINITION FINAL.
     TYPES text_length   TYPE i.
     TYPES length_icon   TYPE icon_d.
     TYPES length_status TYPE c LENGTH 20.
-    TYPES location      TYPE c LENGTH 80.
+    TYPES location      TYPE c LENGTH 132.
     TYPES include       TYPE progname.
     TYPES source_line   TYPE i.
     TYPES hardcoded_kind TYPE zcl_tr_transl_hardcoded=>ty_kind.
@@ -180,6 +184,7 @@ CLASS lcl_report DEFINITION FINAL.
       BEGIN OF status,
         hardcoded   TYPE c LENGTH 1 VALUE 'H',
         table_entry TYPE c LENGTH 1 VALUE 'T',
+        ui5_text    TYPE c LENGTH 1 VALUE 'U',
       END OF status.
 
     " The lines of the list; global for the editable ALV and its callbacks.
@@ -262,6 +267,10 @@ CLASS lcl_report DEFINITION FINAL.
       IMPORTING
         objects TYPE zcl_tr_transl_check=>ty_objects.
     METHODS add_table_entries
+      IMPORTING
+        objects   TYPE zcl_tr_transl_check=>ty_objects
+        languages TYPE zcl_tr_transl_check=>ty_languages.
+    METHODS add_ui5_texts
       IMPORTING
         objects   TYPE zcl_tr_transl_check=>ty_objects
         languages TYPE zcl_tr_transl_check=>ty_languages.
@@ -366,6 +375,11 @@ CLASS lcl_report IMPLEMENTATION.
     IF p_table = abap_true AND only_listed = abap_true.
       add_table_entries( objects = objects languages = languages ).
     ENDIF.
+    " The texts of UI5 apps are translated in the repository of the app:
+    " only listed as well.
+    IF p_ui5 = abap_true AND only_listed = abap_true.
+      add_ui5_texts( objects = objects languages = languages ).
+    ENDIF.
     SORT list BY object obj_name language text_key source_line.
     original = list.
 
@@ -376,7 +390,8 @@ CLASS lcl_report IMPLEMENTATION.
                   |{ missing } missing, { same } same as source|.
     IF only_listed = abap_true.
       title = |{ title }, { count_status( status-hardcoded ) } hardcoded, | &&
-              |{ count_status( status-table_entry ) } table entries|.
+              |{ count_status( status-table_entry ) } table entries, | &&
+              |{ count_status( status-ui5_text ) } UI5 app texts|.
     ELSEIF r_down = abap_true AND p_hard = abap_true.
       title = |{ title }, { count_status( status-hardcoded ) } hardcoded|.
     ENDIF.
@@ -440,6 +455,24 @@ CLASS lcl_report IMPLEMENTATION.
                       status_text = |table entry missing { zcl_tr_transl_check=>language_code( finding-language ) }|
                       language = finding-language source_language = finding-source_language
                       source_text = finding-source_text location = finding-entry_key ) TO list.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD add_ui5_texts.
+    DATA(findings) = NEW zcl_tr_transl_ui5( languages )->check_objects( objects ).
+    LOOP AT findings INTO DATA(finding).
+      DATA(code) = zcl_tr_transl_check=>language_code( finding-language ).
+      APPEND VALUE #( object = 'WAPA' obj_name = finding-application devclass = finding-devclass
+                      status = status-ui5_text text_kind = zcl_tr_transl_check=>ui5_text_kind
+                      status_text = COND #( WHEN finding-problem = zcl_tr_transl_ui5=>problem-file_missing
+                                            THEN |UI5 file missing { code }|
+                                            ELSE |UI5 text missing { code }| )
+                      language = finding-language source_language = finding-source_language
+                      text_key = finding-text_key source_text = finding-source_text
+                      " The key can be longer than the column Text key.
+                      location = COND #( WHEN finding-text_key IS INITIAL THEN finding-file
+                                         ELSE |{ finding-text_key } in { finding-file }| ) ) TO list.
     ENDLOOP.
   ENDMETHOD.
 
@@ -1043,6 +1076,9 @@ CLASS lcl_report IMPLEMENTATION.
       WHEN status-table_entry.
         MESSAGE |Table { line-obj_name }, entry { line-location }: translate it in its maintenance view (SM30) | &&
                 |or in SE63| TYPE 'S'.
+      WHEN status-ui5_text.
+        MESSAGE |UI5 app { line-obj_name }, { line-location }: translate it in the i18n file of the app, | &&
+                |or in SE63 for the app| TYPE 'S'.
       WHEN OTHERS.
         MESSAGE |SE63: object type { line-lxe_type }, object { line-lxe_name }, | &&
                 |{ zcl_tr_transl_check=>language_code( line-source_language ) } to | &&
@@ -1125,6 +1161,7 @@ INITIALIZATION.
   t_desc   = 'Also descriptions that only developers see'.
   t_hard   = 'Hardcoded texts in the source code (list, own sheet or CSV file)'.
   t_table  = 'Entries of text tables without translation (only in the list)'.
+  t_ui5    = 'Texts of UI5 apps: their i18n files (only in the list)'.
 
   LOOP AT lcl_report=>default_namespaces( ) INTO DATA(g_default).
     APPEND VALUE #( sign = 'I' option = 'EQ' low = g_default ) TO s_nspc.

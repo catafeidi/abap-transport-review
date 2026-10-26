@@ -48,7 +48,16 @@ Not checked, because only developers see them: descriptions of classes, interfac
 
 The list is method `IS_RUNTIME_TYPE` of `ZCL_TR_TRANSL_CHECK`; the names of the SE63 types are in table `LXE_ATTOBT`.
 
-**Not covered yet: the texts of a UI5 app itself.** They are the `i18n*.properties` files of its BSP application, not SE63 texts, so a missing `i18n_de.properties` or a missing key is not found. Neither are literals in XML views or JavaScript, launchpad catalogs and groups kept as Customizing (`/UI2/` tables), or texts typed into an OData model in SEGW instead of coming from a data element.
+**Texts of UI5 apps.** A UI5 app is a BSP application (`WAPA`); its texts are `i18n*.properties` files of the application. An app deployed to the SAPUI5 ABAP repository can be translated two ways, and both count: the language file in the app, or SE63 (the repository keeps the texts of `i18n.properties` in `/UI5/TREP_TEXT_T` and serves `i18n_de.properties` from the German translation at runtime). Class `ZCL_TR_TRANSL_UI5` reads both through the API of the repository (`/UI5/IF_UI5_REP_DT`, `/UI5/IF_UI5_REP_TEXTS_RT`), which knows its path mapping and line format; a classic BSP application without it is skipped:
+
+- Per bundle (`i18n/i18n`, or another name such as `messagebundle`) the file without language is the text of the original language of the app (TADIR). When an app has none, the file of its original language is used (`messagebundle_en.properties`). A bundle without texts (only comments) needs nothing.
+- A required language needs its file: `i18n_de.properties` or `i18n_de_DE.properties` for German, `zh_CN` (or `zh`) for Chinese, `zh_TW` for Chinese (traditional), `he` or `iw` for Hebrew; the code is the ISO code of `T002`. Pseudo languages such as `en_US_sappsd` never count.
+- In the file of the language or in SE63, every key of the original with a text must have a text. Keys marked as never translated (`#NOTR` in the comment before them) do not count; when a key comes twice, the last text counts, as in Java.
+- A part of the file name is a language only when `T002` knows the code (or the old codes `iw`, `in`), so `app_ui.properties` is the bundle `app_ui`.
+
+A missing language is one line ("UI5 file missing DE", the text says how many texts it would hold); a missing or empty key is one line per key ("UI5 text missing DE", column Where = key and file). The list shows them with "Texts of UI5 apps" under "Show also", only in the list without "Enter translations": they are translated in the i18n file of the app or in SE63 for the app, not in the editable list. The release check counts them like the other missing texts (object `WAPA`); "Translate now" is offered only when other texts are missing as well.
+
+Not covered: literals in XML views or JavaScript, launchpad catalogs and groups kept as Customizing (`/UI2/` tables), texts typed into an OData model in SEGW instead of coming from a data element.
 
 Only objects of the packages under Git are checked: objects in a package that matches the pattern of the system (STVARV `ZTR_PACKAGES`). Local objects (`$...`) never.
 
@@ -62,6 +71,7 @@ The objects run on 7.40 and on S/4HANA unchanged. The XCO library (`XCO_CP_I18N`
 | Class `ZCL_TR_TRANSL_FILE` | The missing texts as an Excel file (.xlsx) or as CSV files (UTF-8, `;`), and back; the Excel file is built with `CL_ABAP_ZIP` and read with iXML |
 | Class `ZCL_TR_TRANSL_HARDCODED` | Hardcoded texts: literals in the source code that the user sees |
 | Class `ZCL_TR_TRANSL_TABLE_TEXTS` | Entries of tables with a language key that exist in one required language and not in another |
+| Class `ZCL_TR_TRANSL_UI5` | The i18n files of UI5 apps (`WAPA`): missing language files, missing or empty keys |
 | Report `ZTR_TRANSL_REPORT` | The list of the findings ("run all"), ALV; with "Enter translations" the translations are typed into the list and saved, written as SE63 does and recorded in the request; download and upload of the Excel file, from the selection screen or with the buttons of the editable list (own GUI status `TRANSLATION_LIST`, a copy of `STANDARD_FULLSCREEN` of `SAPLSLVC_FULLSCREEN`) |
 | BAdI implementation `ZTR_TRANSL_CHECK` (`CTS_REQUEST_CHECK`), class `ZCL_IM_TR_TRANSL_CHECK` | The check at the release of a task or request |
 | Report `ZTR_SETUP`, block "Translation check at release" | Writes the settings and shows their state |
@@ -89,7 +99,7 @@ A language is added later by adding a row to `ZTR_TRANSL_LANGUAGES` (in `ZTR_SET
 | Namespaces (run all) | every object whose name starts with one of them, in any package that is not local. Filled with the namespaces of the package pattern, for example `/MYNS/` for `/MYNS/*` |
 | Packages (if no namespace) | every object of the packages that match the pattern |
 | Languages | empty: the required languages from STVARV |
-| Show also | translations that are the same as the source text; objects SE63 could not read; descriptions that only developers see (see "Which texts"); hardcoded texts and table entries (both ticked by default, only in the list without "Enter translations"; the hardcoded texts also go into the sheet "Hardcoded texts" of the downloaded file) |
+| Show also | translations that are the same as the source text; objects SE63 could not read; descriptions that only developers see (see "Which texts"); hardcoded texts, table entries and texts of UI5 apps (all ticked by default, only in the list without "Enter translations"; the hardcoded texts also go into the sheet "Hardcoded texts" of the downloaded file) |
 | Enter translations | the column Translation can be typed in; Save writes the translations |
 | Excel or CSV file | "No file" shows the list; "Download" writes the texts to translate as an .xlsx file, or with "As CSV files" as CSV files; "Upload" reads a translated Excel or CSV file into the editable list (see "Translating in an Excel file") |
 | Record in | the task or request the translations are recorded in, so that they are transported. Empty: the task or request above. With neither, Save asks for a request (standard dialog of the transport organizer); Cancel there writes nothing |

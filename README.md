@@ -220,7 +220,7 @@ abapGit has to be the developer version of a release that matches your system; t
 | Report `ZTR_PUSH_TRANSPORT` | The push, the pull request, the review check, the merge |
 | Class `ZCL_TR_CONTENT` | Everything a transport carries that abapGit does not write, as JSON under `content/` |
 | Class `ZCL_TR_CONTENT_APPLY`, report `ZTR_APPLY_CONTENT` | The other direction: applies the files of `content/` to another system and records them in a request |
-| Report `ZTR_TRANSL_REPORT`, classes `ZCL_TR_TRANSL_CHECK`, `ZCL_TR_TRANSL_FILE`, `ZCL_TR_TRANSL_HARDCODED`, `ZCL_TR_TRANSL_TABLE_TEXTS` | Optional translation check: lists the texts without translation in the required languages, hardcoded texts and text table entries; translate in the list or in an Excel file, saved as SE63 does and recorded in a request |
+| Report `ZTR_TRANSL_REPORT`, classes `ZCL_TR_TRANSL_CHECK`, `ZCL_TR_TRANSL_FILE`, `ZCL_TR_TRANSL_HARDCODED`, `ZCL_TR_TRANSL_TABLE_TEXTS`, `ZCL_TR_TRANSL_UI5` | Optional translation check: lists the texts without translation in the required languages (also CDS labels, launchpad tiles and the i18n texts of UI5 apps), hardcoded texts and text table entries; translate in the list or in an Excel or CSV file, saved as SE63 does and recorded in a request |
 | BAdI implementation `ZTR_TRANSL_CHECK` (`CTS_REQUEST_CHECK`), class `ZCL_IM_TR_TRANSL_CHECK` | The translation check at release: off, inform or block; `#DELIVERY` and `#NOTRANSL` markers |
 
 Not in here, on purpose: abapGit itself (package `$ABAPGIT`) and the abaplint client (package `$ABAPLINT`). Both are installed from their own public repositories.
@@ -250,7 +250,7 @@ Not in here, on purpose: abapGit itself (package `$ABAPGIT`) and the abaplint cl
 | [docs/NOT-IN-GIT.md](docs/NOT-IN-GIT.md) | What a transport carries beyond repository objects and where it goes |
 | [docs/TRANSPORTS.md](docs/TRANSPORTS.md) | Building transports, step by step for developers: request, task, review, merge, imports, a transport for a customer, the markers |
 | [docs/TRANSLATION-CHECK.md](docs/TRANSLATION-CHECK.md) | The translation check (optional): which texts, settings, the report, the check at release, recording |
-| [docs/TRANSLATION-GUIDE.md](docs/TRANSLATION-GUIDE.md) | Translating, step by step: in the list, in an Excel file, at release; fixing hardcoded texts |
+| [docs/TRANSLATION-GUIDE.md](docs/TRANSLATION-GUIDE.md) | Translating, step by step: in the list, in an Excel or CSV file, at release; fixing hardcoded texts; UI5 apps |
 | [docs/ABAPLINT-IN-SAP.md](docs/ABAPLINT-IN-SAP.md) | abaplint as a Code Inspector and ATC check (optional) |
 | [docs/ATC-AT-RELEASE.md](docs/ATC-AT-RELEASE.md) | Run ATC checks at task and request release (optional) |
 | [docs/ABAPGIT-DOCV-FIX.md](docs/ABAPGIT-DOCV-FIX.md) | A note on abapGit and documentation objects with a namespace |

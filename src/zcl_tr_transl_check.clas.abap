@@ -180,6 +180,17 @@ CLASS zcl_tr_transl_check DEFINITION
         lxe_name      TYPE csequence
       RETURNING
         VALUE(result) TYPE abap_bool.
+    "! Kind of text of the texts of UI5 apps: they are translated in the
+    "! app or in SE63 for the app, never in the editable list.
+    CONSTANTS ui5_text_kind TYPE c LENGTH 40 VALUE 'Text of a UI5 app (i18n file)'.
+    "! The texts of UI5 apps (ZCL_TR_TRANSL_UI5) as missing texts of the
+    "! app (WAPA), so that the release counts and names them like the
+    "! others. The file is in LXE_NAME, the key in TEXT_KEY.
+    CLASS-METHODS from_ui5_findings
+      IMPORTING
+        findings      TYPE zcl_tr_transl_ui5=>ty_findings
+      RETURNING
+        VALUE(result) TYPE ty_findings.
 
     "! @parameter languages | the required languages; empty = the configured ones
     "! @parameter exclusions | object names to skip; empty = the configured ones
@@ -631,7 +642,23 @@ CLASS zcl_tr_transl_check IMPLEMENTATION.
 
 
   METHOD check_transport_objects.
-    result = check_objects( main_objects( objects ) ).
+    DATA(main) = main_objects( objects ).
+    result = check_objects( main ).
+    " UI5 apps keep their texts in i18n files, which SE63 does not know.
+    DATA(required) = VALUE ty_languages( FOR language IN languages ( language-r3 ) ).
+    APPEND LINES OF from_ui5_findings( NEW zcl_tr_transl_ui5( required )->check_objects( objects_in_scope( main ) ) )
+      TO result.
+  ENDMETHOD.
+
+
+  METHOD from_ui5_findings.
+    LOOP AT findings INTO DATA(finding).
+      APPEND VALUE #( object = 'WAPA' obj_name = finding-application devclass = finding-devclass
+                      lxe_name = finding-file text_key = finding-text_key
+                      text_kind = ui5_text_kind
+                      language = finding-language source_language = finding-source_language
+                      source_text = finding-source_text status = status-missing ) TO result.
+    ENDLOOP.
   ENDMETHOD.
 
 

@@ -53,6 +53,11 @@ METHOD if_ex_cts_request_check~check_before_release.
 * carry the translations just recorded. The developer releases again;
 * with everything translated the check passes.
 *
+* Texts of UI5 apps (i18n files, ZCL_TR_TRANSL_UI5) count like the other
+* texts, but "Translate now" cannot translate them: they are translated
+* in the i18n files of the app or in SE63 for the app. When only they
+* are missing, the release shows the message without the list.
+*
 * A translation that is the same as the source text is never a reason
 * to refuse: some product terms stay English on purpose. Only the texts
 * the user sees when the product runs are checked; descriptions that
@@ -174,6 +179,13 @@ METHOD if_ex_cts_request_check~check_before_release.
   IF missing = 0.
     RETURN.
   ENDIF.
+  " Texts of UI5 apps are translated in the i18n files of the app or in
+  " SE63 for the app, not in the editable list: "Translate now" only
+  " helps with the others.
+  DATA(ui5_missing) = REDUCE i( INIT count = 0
+                                FOR ui5 IN findings WHERE ( status    = zcl_tr_transl_check=>status-missing AND
+                                                            text_kind = zcl_tr_transl_check=>ui5_text_kind )
+                                NEXT count = count + 1 ).
 
   " The first objects, so that the developer knows where to start.
   LOOP AT findings INTO DATA(finding) WHERE status = zcl_tr_transl_check=>status-missing.
@@ -195,7 +207,8 @@ METHOD if_ex_cts_request_check~check_before_release.
   DATA(codes) = VALUE string_table( FOR language IN languages ( zcl_tr_transl_check=>language_code( language ) ) ).
   part_2 = | in { concat_lines_of( table = codes sep = `, ` ) }:|.
   part_3 = | { objects_text }.|.
-  part_4 = | List: report { zcl_tr_transl_check=>report_name }.|.
+  part_4 = COND #( WHEN ui5_missing = 0 THEN | List: report { zcl_tr_transl_check=>report_name }.|
+                   ELSE | { ui5_missing } in UI5 apps: i18n files or SE63.| ).
 
 * ---- a delivery: refused, nothing is translated into it ---------------
   IF delivery = abap_true.
@@ -207,9 +220,10 @@ METHOD if_ex_cts_request_check~check_before_release.
   ENDIF.
 
   DATA(on_screen) = xsdbool( dialog = abap_true AND adt = abap_false AND sy-batch = abap_false ).
+  DATA(offer_list) = xsdbool( on_screen = abap_true AND missing > ui5_missing ).
 
 * ---- on the screen: translate right now, in a list --------------------
-  IF on_screen = abap_true.
+  IF offer_list = abap_true.
     CALL FUNCTION 'POPUP_TO_CONFIRM'
       EXPORTING
         titlebar              = 'Translations are missing'
@@ -253,7 +267,7 @@ METHOD if_ex_cts_request_check~check_before_release.
 
   IF mode = zcl_tr_transl_check=>mode-inform.
     " The release goes on.
-    IF on_screen = abap_false.
+    IF offer_list = abap_false.
       MESSAGE ID '00' TYPE 'S' NUMBER '001' WITH part_1 part_2 part_3 part_4.
     ENDIF.
     RETURN.
