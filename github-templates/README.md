@@ -15,6 +15,7 @@ Copy what you need into the repository that holds your ABAP package.
 | `abaplint-new-repository/abapgit.xml` | `.abapgit.xml` | folder logic Prefix, language E, ABAP language version `ignore` |
 | `github-protect-master.sh` | run on the workstation | rulesets "No deletion, no force push" (`basic`) and "Default branch only through reviewed pull requests" (`review`) |
 | `github-restrict-merge.sh` | run on the workstation, after the GitHub App is installed on the repository | ruleset "Default branch merged only by SAP release or an admin" |
+| `merge-released-request/` | `.github/workflows/merge-released-request.yml`, `.github/scripts/merge-released-request.mjs`, `.github/scripts/merge-released-request.test.mjs`; plus the environment `sap-merge` (default branch only), variable `MERGE_APP_ID`, secrets `MERGE_APP_PRIVATE_KEY` and `SAP_EVENT_SECRET` | every repository with the ruleset above: the release on SAP asks this workflow to merge, with an event signed by SAP (`docs/GITHUB-REPOSITORY-SETUP.md`, "The merge by workflow and the signed event") |
 
 Repository settings that go with them: default branch `master`, squash merge only, delete the branch on merge, squash commit = title and description of the pull request. See `docs/GITHUB-REPOSITORY-SETUP.md`.
 

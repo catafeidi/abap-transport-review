@@ -90,7 +90,36 @@ bash github-restrict-merge.sh <owner> <github-app-id> <repository> [<repository>
 | `<github-app-id>` | the numeric App ID on the settings page of the GitHub App |
 | `<repository> ...` | one or more repositories |
 
-Run it after the App is installed on the repository: GitHub refuses the ruleset while the App is not installed there. With this ruleset GitHub reports every pull request as blocked, approved or not. The release check then asks GitHub directly (approved, mergeable, commit that was judged, all conversations resolved, checks of that commit not failed) and counts the pull request as approved only if all of that holds. Whether GitHub accepts the merge of a **user** token of the App through this bypass for a developer who is not an admin is not proven by this repository. If the merge is refused, remove the ruleset and merge by hand or rely on the `review` ruleset alone.
+Run it after the App is installed on the repository: GitHub refuses the ruleset while the App is not installed there. With this ruleset GitHub reports every pull request as blocked, approved or not. The release check then asks GitHub directly (approved, mergeable, commit that was judged, all conversations resolved, checks of that commit not failed) and counts the pull request as approved only if all of that holds. GitHub does **not** accept the merge with the **user** token of the App for a developer who is not an admin: the user token counts as the person, not as the App, for the bypass. Only an admin's release would merge. The next section closes that gap.
+
+### The merge by workflow and the signed event
+
+The report first tries the merge with the token of the developer. When GitHub answers 403 or 405 it sends `repository_dispatch` with the event type `sap-request-released` (request, pull request number, the commit SAP judged, title and message of the squash commit) and waits up to three minutes until the pull request is merged. The workflow `.github/workflows/merge-released-request.yml` runs on the default branch and merges with the token of the GitHub App (an installation token, which the ruleset trusts). The script `.github/scripts/merge-released-request.mjs` merges only an event that carries the signature of SAP (below), and then only the open pull request of `review/<request>`, from the same repository, at the commit SAP judged, when it is approved, has no open review comment and no failing or running check. The rule "default branch only through reviewed pull requests" applies to the App as well.
+
+**The signed event.** Anybody with write access can send a `repository_dispatch`, so the event carries `timestamp` (seconds since 1970, UTC) and `signature`: HMAC-SHA256 as lower-case hex, made with a secret that only SAP and the environment `sap-merge` know, over these six fields joined by a line feed: request, pull request number, commit, timestamp, title and message (the message last, so its own line breaks cannot shift a field). The workflow checks the signature before it asks GitHub for anything with the rights of the App, and refuses an event older than ten minutes or dated more than a minute ahead (check the clock of the SAP system). So the release on SAP is the only way to a merge, and only an admin can still merge by hand on GitHub. What is weaker than a check against SAP itself: a developer who digs the secret out of SAP could sign an event. It is kept like the per-developer tokens (encrypted in `INDX`, area `ZT`, key in the same table), so the exposure is the same as theirs.
+
+Files: copy `github-templates/merge-released-request/merge-released-request.yml` to `.github/workflows/`, and `merge-released-request.mjs` and `merge-released-request.test.mjs` to `.github/scripts/`. Test of the workflow side: `node --test .github/scripts/merge-released-request.test.mjs`.
+
+The secret, once per SAP system and once per repository:
+
+1. Make a random value and keep it nowhere else: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+2. On the SAP system run report `ZTR_SET_EVENT_SECRET` (SE38). Enter the value; it is stored encrypted and cannot be read again. The report prints the signature of a sample event.
+3. In GitHub: `gh secret set SAP_EVENT_SECRET --env sap-merge -R <owner>/<repo>` and paste the same value at the prompt.
+4. Compare both sides with the value in the variable `S`: `node -e "const c=require('crypto');console.log(c.createHmac('sha256',process.env.S).update(['DEVK900001','1','b'.repeat(40),'1700000000','T (#1)','M'].join('
+')).digest('hex'))"`. The output must equal the signature printed by the report. If it does not, the secret or the text differs; do not release anything until it does.
+
+Replacing the secret: run the report again (it asks to confirm) and set the same new value in every repository.
+
+The private key of the App is a secret of the environment `sap-merge`, never of the repository: only the default branch may use that environment, so a workflow on another branch cannot read the key. Setup per repository, by an admin (`master` = your default branch):
+
+```
+gh api -X PUT repos/<owner>/<repo>/environments/sap-merge -F deployment_branch_policy[protected_branches]=false -F deployment_branch_policy[custom_branch_policies]=true
+gh api -X POST repos/<owner>/<repo>/environments/sap-merge/deployment-branch-policies -f name=master -f type=branch
+gh api -X POST repos/<owner>/<repo>/environments/sap-merge/variables -f name=MERGE_APP_ID -f value=<github-app-id>
+gh secret set MERGE_APP_PRIVATE_KEY --env sap-merge -R <owner>/<repo> < downloaded-key.pem
+```
+
+The key is generated on the settings page of the App (Private keys) and deleted from the disk after the last repository has it. The App must be installed on the repository with the rights Contents and Pull requests: Read and write. Check with a developer who is not an admin: release a request with an approved pull request; the job log shows "the merge is asked of the repository workflow", then "merged by the workflow".
 
 ## CODEOWNERS
 
@@ -131,6 +160,7 @@ Every developer needs write access to the repositories.
 | recommended | `.github/CODEOWNERS` |
 | recommended | abaplint workflow and other checks from `github-templates/` as required status checks |
 | optional | `github-restrict-merge.sh` |
+| with the ruleset above | `merge-released-request/` workflow, environment `sap-merge`, report `ZTR_SET_EVENT_SECRET` |
 
 ## Commands to look at the state
 

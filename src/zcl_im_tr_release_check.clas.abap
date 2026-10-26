@@ -57,6 +57,9 @@ METHOD if_ex_cts_request_check~check_before_release.
 *                       the whole object, so the request would carry that
 *                       work, and the release order of the two would
 *                       decide what a later system gets (status C).
+*                       The other request is refused for the same reason,
+*                       so the way out is to merge the two in SE09
+*                       (Merge Requests).
 *
 * A refusal is always visible:
 *   release in the dialog     -> popup with the reason, then the error
@@ -120,6 +123,7 @@ METHOD if_ex_cts_request_check~check_before_release.
   DATA differences     TYPE i.
   DATA detail          TYPE string.
   DATA link            TYPE string.
+  DATA other_request   TYPE trkorr.
   DATA fields          TYPE STANDARD TABLE OF sval.
   DATA returncode      TYPE c LENGTH 1.
   DATA github_login    TYPE string.
@@ -131,6 +135,7 @@ METHOD if_ex_cts_request_check~check_before_release.
   DATA part_3          TYPE sy-msgv3.
   DATA part_4          TYPE sy-msgv4.
   DATA is_under_git    TYPE abap_bool.
+  DATA namespaces      TYPE zcl_tr_namespace=>ty_namespaces.
   DATA object_package  TYPE devclass.
   DATA directory_entry TYPE tadir.
 
@@ -198,15 +203,28 @@ METHOD if_ex_cts_request_check~check_before_release.
     IF object_package IS NOT INITIAL.
       IF object_package CP package_pattern.
         is_under_git = abap_true.
-        EXIT.
+        INSERT zcl_tr_namespace=>of_name( object_package ) INTO TABLE namespaces.
       ENDIF.
     ELSEIF object_entry-obj_name CP package_pattern.
       is_under_git = abap_true.
-      EXIT.
+      INSERT zcl_tr_namespace=>of_name( object_entry-obj_name ) INTO TABLE namespaces.
     ENDIF.
   ENDLOOP.
   IF is_under_git = abap_false.
     RETURN.
+  ENDIF.
+
+* ---- one product line per request: one namespace ----------------------
+  " Every namespace is a product line of its own (for example /MYNS/ and
+  " /MYNSREP/), delivered separately, so a task or request holds objects
+  " of one of them only. Objects without a namespace do not count.
+  DELETE namespaces WHERE table_line IS INITIAL.
+  IF lines( namespaces ) > 1.
+    part_1 = |{ request } mixes the namespaces|.
+    part_2 = | { zcl_tr_namespace=>as_text( namespaces ) }.|.
+    part_3 = ' One request per product line: move the'.
+    part_4 = ' objects of the other namespace to another request.'.
+    MESSAGE ID '00' TYPE 'E' NUMBER '001' WITH part_1 part_2 part_3 part_4 RAISING cancel.
   ENDIF.
 
 * ---- the person who releases must be logged in to GitHub ------------
@@ -276,10 +294,11 @@ METHOD if_ex_cts_request_check~check_before_release.
       WITH p_check  = abap_true
       EXPORTING LIST TO MEMORY
       AND RETURN.
-    IMPORT status      = status
-           differences = differences
-           detail      = detail
-           link        = link
+    IMPORT status        = status
+           differences   = differences
+           detail        = detail
+           link          = link
+           other_request = other_request
            FROM MEMORY ID check_memory.
     IF sy-subrc <> 0.
       CLEAR status.
@@ -298,12 +317,17 @@ METHOD if_ex_cts_request_check~check_before_release.
       WHEN open_elsewhere.
         " The Git file of an object is the whole object as it is active here,
         " so this request would carry the work of the other request, which
-        " has not been reviewed or released. Order matters: that request
-        " first, or the object out of this one.
-        part_1 = |{ request } is not released: { detail }.|.
-        part_2 = ' Release that request first (its pull'.
-        part_3 = ' request merged), or remove the object from'.
-        part_4 = ' this request. Then release again.'.
+        " has not been reviewed or released. The other request is refused
+        " for the same reason, so releasing it first does not work either:
+        " both have to become one request.
+        part_1 = |{ detail }.|.
+        part_2 = ' Both requests wait for each other. In SE09'.
+        IF other_request IS INITIAL.
+          part_3 = ' use Merge Requests: the other request'.
+        ELSE.
+          part_3 = | use Merge Requests: { other_request }|.
+        ENDIF.
+        part_4 = | into { request }, then release again.|.
         is_refused = abap_true.
 
       WHEN review_is_pending.

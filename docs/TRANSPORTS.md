@@ -27,8 +27,9 @@ This is one way of working with the tools, written as rules for a team. Adapt it
 | Short text | `ABC-123 What the change does`: the issue key first ([JIRA.md](JIRA.md)). Markers (below) go at the end |
 | Target | the one SE09 proposes for the package |
 | One issue | one request. Do not mix two issues in one request |
+| One product line | one namespace. A namespace is usually a product line that is delivered on its own, so the release check refuses a task or request whose objects come from two namespaces. Objects without a namespace (Z, Y) do not count |
 
-**No object in two open requests.** If the object you want to change is already in another open request (yours or a colleague's), the release of your request is refused later ([WORKFLOW.md](WORKFLOW.md), "Release order"). Either finish and release the other request first, or agree with its owner who changes the object.
+**No object in two open requests.** If the object you want to change is already in another open request (yours or a colleague's), the release of your request is refused later ([WORKFLOW.md](WORKFLOW.md), "Release order"). Both requests are then refused, each because of the other. Agree with the owner of the other request who changes the object, or put the work into one request: SE09, Merge Requests, the other request into yours.
 
 **Documentation of the request.** SE09, request, Documentation: write what changed and why. It is copied into the pull request and into the commit on the base branch.
 
@@ -67,7 +68,7 @@ After the approval and with all comments resolved, release the **request**.
 |---|---|---|
 | Review | an object differs from the approved pull request, or the pull request is not approved | release a new task / get the approval |
 | Up to date | the pull request is behind the base branch | "Update branch" on the pull request, or release a new task, then the request again |
-| Release order | an object is also in another open request | release that request first |
+| Release order | an object is also in another open request | merge the two requests in SE09 (Merge Requests), then release |
 | Translation check | as for the task | translate in a task of this request |
 
 Then job `GIT_MERGE_<request>` squashes and merges the pull request into the base branch. The Git log of the base branch is the list of requests.
@@ -107,7 +108,7 @@ A fix made on a separate hotfix system comes back into development **through Git
 |---|---|
 | `<user> is not logged in to GitHub` | `ZTR_GITHUB_LOGIN`, then release again |
 | `pull request <number> is not approved yet` | get the review, then release the request |
-| object `<x>` is also in request `<y>` | release `<y>` first, or remove the object from your request |
+| `<x>` is also in `<y>` ... Both requests wait for each other | SE09, Merge Requests: `<y>` into your request, then release again |
 | the pull request is behind the base branch | "Update branch" on GitHub, then release again |
 | `<request>: N text(s) without translation ...` | "Translate now", or `ZTR_TRANSL_REPORT` with your task |
 | `... Delivery: translate in the development requests.` | the delivery is missing a translation: translate in a development request, release it, rebuild the delivery |

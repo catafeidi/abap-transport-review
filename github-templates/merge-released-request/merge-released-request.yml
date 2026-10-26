@@ -1,0 +1,41 @@
+name: Merge released request
+
+# The release of a request on the SAP system merges its pull request. For a developer who is not a
+# repository admin GitHub refuses that merge (ruleset "master merged only by SAP release or an admin"),
+# so the SAP job sends this event instead and the merge is done here, with the token of the GitHub App
+# that the ruleset trusts.
+#
+# Safety:
+# - The event carries an HMAC signature made on SAP with a secret that only SAP and this repository
+#   (environment "sap-merge") know. Anybody with write access can send an event, but only SAP can sign
+#   one, so nothing else merges. An event older than ten minutes is not accepted.
+# - A repository_dispatch event always runs the workflow file of the default branch, so a branch
+#   cannot change what runs.
+# - The key of the app and the shared secret are secrets of the environment "sap-merge", which only the
+#   default branch may use. A workflow on any other branch cannot read them.
+# - The script merges only the open pull request of review/<request>, at the commit SAP released, when
+#   it is approved without open comments and without failing checks.
+on:
+  repository_dispatch:
+    types: [sap-request-released]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: merge-${{ github.event.client_payload.request }}
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    environment: sap-merge
+    steps:
+      - uses: actions/checkout@v4
+      - name: Merge the pull request of the released request
+        env:
+          APP_ID: ${{ vars.MERGE_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.MERGE_APP_PRIVATE_KEY }}
+          SAP_EVENT_SECRET: ${{ secrets.SAP_EVENT_SECRET }}
+          REPOSITORY: ${{ github.repository }}
+        run: node .github/scripts/merge-released-request.mjs

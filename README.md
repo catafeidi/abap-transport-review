@@ -213,6 +213,7 @@ abapGit has to be the developer version of a release that matches your system; t
 |---|---|
 | Report `ZTR_SETUP`, class `ZCL_TR_SETUP` | Writes the settings of a system (STVARV, abaplint client) and checks everything the workflow needs, with a green, yellow or red light per point. The class does the work and returns the lines; the report only shows them |
 | Report `ZTR_GITHUB_LOGIN` | The one-time GitHub login of each developer (device flow of a GitHub App); also shows the status and logs out |
+| Report `ZTR_SET_EVENT_SECRET` | Once per system: stores the secret that signs the event asking GitHub to merge a released request (`docs/GITHUB-REPOSITORY-SETUP.md`) |
 | Class `ZCL_TR_AUTH` | The GitHub token of the SAP user, encrypted, per user; the package pattern of the system |
 | Class `ZCL_ABAPGIT_USER_EXIT` | abapGit user exit: Git traffic to github.com with the token of the current user (abapGit requires this name) |
 | BAdI implementation `ZTR_RELEASE_CHECK` (`CTS_REQUEST_CHECK`), class `ZCL_IM_TR_RELEASE_CHECK` | The release check: login required, task release starts the push, request release needs the approved pull request |

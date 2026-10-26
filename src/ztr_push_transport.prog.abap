@@ -155,6 +155,8 @@ CLASS lcl_transport_push DEFINITION FINAL.
     " does not. How many, and the first one for the refusal message.
     DATA open_elsewhere       TYPE i READ-ONLY.
     DATA first_open_elsewhere TYPE string READ-ONLY.
+    " The request of the first one: the refusal names it as the request to merge.
+    DATA first_other_request  TYPE trkorr READ-ONLY.
     DATA first_not_in_git TYPE string READ-ONLY.
 
   PRIVATE SECTION.
@@ -209,6 +211,11 @@ CLASS lcl_transport_push DEFINITION FINAL.
       END OF merge_state.
     CONSTANTS seconds_between_attempts TYPE i VALUE 10.
     CONSTANTS attempts_by_hand         TYPE i VALUE 6.
+    " The merge that GitHub refuses to the token of a developer who is not an
+    " administrator is done by a workflow of the repository, with the token
+    " of the GitHub App. This report asks for it and waits for the answer.
+    CONSTANTS merge_event              TYPE string VALUE 'sap-request-released'.
+    CONSTANTS attempts_for_workflow    TYPE i VALUE 18.
     CONSTANTS attempts_before_release  TYPE i VALUE 60.
     CONSTANTS attempts_for_lock        TYPE i VALUE 180.
     CONSTANTS attempts_for_lock_in_check TYPE i VALUE 6.
@@ -450,6 +457,14 @@ CLASS lcl_transport_push DEFINITION FINAL.
       IMPORTING
         repository TYPE REF TO zif_abapgit_repo_online
         review     TYPE string
+      RAISING
+        zcx_abapgit_exception.
+    METHODS merge_by_workflow
+      IMPORTING
+        pull_request TYPE ty_pull_request
+        review       TYPE string
+        title        TYPE string
+        message      TYPE string
       RAISING
         zcx_abapgit_exception.
     METHODS github_client
@@ -1128,7 +1143,7 @@ CLASS lcl_transport_push IMPLEMENTATION.
     " this system. A class changed by this request holds every method of it,
     " also the ones of a task that is not released. Say so in the log, and
     " in the pull request through other_requests_text.
-    CLEAR: other_requests_text, open_elsewhere, first_open_elsewhere.
+    CLEAR: other_requests_text, open_elsewhere, first_open_elsewhere, first_other_request.
 
     LOOP AT open_request_objects( ) INTO DATA(in_work)
          WHERE request <> me->request AND is_copy = abap_false.
@@ -1139,6 +1154,7 @@ CLASS lcl_transport_push IMPLEMENTATION.
       open_elsewhere = open_elsewhere + 1.
       IF first_open_elsewhere IS INITIAL.
         first_open_elsewhere = |{ in_work-obj_name } is also in { in_work-request } ({ in_work-owner })|.
+        first_other_request  = in_work-request.
       ENDIF.
       log( |Also in a request that is not released: { line }| ).
       other_requests_text = COND #( WHEN other_requests_text IS INITIAL THEN `` ELSE |{ other_requests_text }\n| ) &&
@@ -1993,12 +2009,95 @@ CLASS lcl_transport_push IMPLEMENTATION.
       IMPORTING
         status   = status
         response = response ).
+    IF status = 403 OR status = 405.
+      " The rule on the base branch lets only administrators and the GitHub
+      " App update it, and the token of this developer is neither.
+      log( |{ name }: GitHub does not let this account merge, the merge is asked of the repository workflow| ).
+      merge_by_workflow(
+        pull_request = pull_request
+        review       = review
+        title        = |{ pull_request-title } (#{ pull_request-number })|
+        message      = message ).
+      log( |{ name }: pull request { pull_request-number } squashed and merged by the workflow, { pull_request-link }| ).
+      RETURN.
+    ENDIF.
     IF status <> 200.
       FIND REGEX '"message"\s*:\s*"([^"]*)"' IN response SUBMATCHES reason.
       zcx_abapgit_exception=>raise( |Pull request { pull_request-number } is NOT merged, HTTP { status } { reason }| ).
     ENDIF.
 
     log( |{ name }: pull request { pull_request-number } squashed and merged, { pull_request-link }| ).
+  ENDMETHOD.
+
+
+  METHOD merge_by_workflow.
+    " repository_dispatch needs the same right as a push, which every
+    " developer has. The workflow merges only the pull request of this
+    " request, at this commit, when it is approved, and only for an event
+    " that carries the signature of this system.
+    DATA status   TYPE i.
+    DATA response TYPE string.
+    DATA reason   TYPE string.
+
+    DATA(request) = substring_after( val = review sub = 'review/' ).
+    DATA(repository_path) = substring_before( val = pull_request-path sub = '/pulls/' ).
+
+    " Anybody with write access can send this event, so it is signed. The
+    " workflow merges only an event that SAP signed, and not a late copy.
+    DATA(timestamp) = zcl_tr_auth=>now_in_seconds( ).
+    DATA(signature) = zcl_tr_auth=>sign_release_event(
+      request      = request
+      pull_request = pull_request-number
+      sha          = pull_request-head
+      timestamp    = timestamp
+      title        = title
+      message      = message ).
+
+    call_github(
+      EXPORTING
+        method   = 'POST'
+        path     = |{ repository_path }/dispatches|
+        body     = |\{"event_type":{ json_string( merge_event ) },"client_payload":\{| &&
+                   |"request":{ json_string( request ) },| &&
+                   |"pull_request":{ pull_request-number },| &&
+                   |"sha":{ json_string( pull_request-head ) },| &&
+                   |"commit_title":{ json_string( title ) },| &&
+                   |"commit_message":{ json_string( message ) },| &&
+                   |"timestamp":{ timestamp },| &&
+                   |"signature":{ json_string( signature ) }\}\}|
+      IMPORTING
+        status   = status
+        response = response ).
+    IF status <> 204.
+      FIND REGEX '"message"\s*:\s*"([^"]*)"' IN response SUBMATCHES reason.
+      zcx_abapgit_exception=>raise( |Pull request { pull_request-number } is NOT merged, the request to the | &&
+                                    |workflow was refused, HTTP { status } { reason }| ).
+    ENDIF.
+
+    " The workflow runs on GitHub; wait until the pull request is merged.
+    DO attempts_for_workflow TIMES.
+      WAIT UP TO seconds_between_attempts SECONDS.
+      call_github(
+        EXPORTING
+          method   = 'GET'
+          path     = pull_request-path
+        IMPORTING
+          status   = status
+          response = response ).
+      IF status = 200.
+        TRY.
+            IF zcl_abapgit_ajson=>parse( response )->get_string( '/merged' ) = 'true'.
+              RETURN.
+            ENDIF.
+          CATCH zcx_abapgit_ajson_error.
+            " Not readable this time; ask again.
+        ENDTRY.
+      ENDIF.
+    ENDDO.
+
+    zcx_abapgit_exception=>raise( |Pull request { pull_request-number } is NOT merged yet. The workflow | &&
+                                  |"Merge released request" did not finish in time or refused the merge. | &&
+                                  |See the tab Actions of the repository, then merge it on GitHub| ).
   ENDMETHOD.
 
 
@@ -2094,7 +2193,7 @@ START-OF-SELECTION.
     "   O = the base branch is complete
     "   A = the review branch is complete and its pull request is approved
     "   C = an object of the request is also in another request that is not
-    "       released (checked before D, P and A)
+    "       released (checked before D, P and A); other_request names it
     "   D = files differ, they are not reviewed
     "   P = the pull request is missing or not approved
     "   B = another push is running
@@ -2133,10 +2232,11 @@ START-OF-SELECTION.
     ELSE.
       check_status = 'O'.
     ENDIF.
-    EXPORT status      = check_status
-           differences = push->differences
-           detail      = check_detail
-           link        = push->github_link
+    EXPORT status        = check_status
+           differences   = push->differences
+           detail        = check_detail
+           link          = push->github_link
+           other_request = push->first_other_request
            TO MEMORY ID 'ZTR_CHECK'.
   ENDIF.
 

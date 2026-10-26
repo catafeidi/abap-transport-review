@@ -121,6 +121,37 @@ CLASS zcl_tr_auth DEFINITION
       RAISING
         zcx_abapgit_exception.
 
+    " The event that asks GitHub to merge a released request is signed with
+    " a secret that only this system and the GitHub environment sap-merge
+    " know (HMAC-SHA256). The secret is kept encrypted like the tokens and
+    " never leaves this class: callers get the signature, not the key.
+    CLASS-METHODS store_event_secret
+      IMPORTING
+        secret TYPE string
+      RAISING
+        zcx_abapgit_exception.
+    CLASS-METHODS has_event_secret
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+    " Lower-case hex. The text that is signed is built here and in
+    " .github/scripts/merge-released-request.mjs (signedText), the same.
+    CLASS-METHODS sign_release_event
+      IMPORTING
+        request       TYPE string
+        pull_request  TYPE i
+        sha           TYPE string
+        timestamp     TYPE string
+        title         TYPE string
+        message       TYPE string
+      RETURNING
+        VALUE(result) TYPE string
+      RAISING
+        zcx_abapgit_exception.
+    " Seconds since 1 January 1970, UTC.
+    CLASS-METHODS now_in_seconds
+      RETURNING
+        VALUE(result) TYPE string.
+
     " The whole login in the dialog: code popup, wait, store. Returns the
     " GitHub login name, or empty when the developer cancelled. Used by
     " the login report and by the release check.
@@ -188,6 +219,8 @@ CLASS zcl_tr_auth DEFINITION
 
     CONSTANTS area             TYPE indx-relid VALUE 'ZT'.
     CONSTANTS key_id           TYPE indx-srtfd VALUE 'KEY:SYSTEM'.
+    CONSTANTS event_secret_id  TYPE indx-srtfd VALUE 'SECRET:EVENT'.
+    CONSTANTS min_secret_length TYPE i VALUE 32.
     CONSTANTS key_length       TYPE i VALUE 32.
     CONSTANTS github           TYPE string VALUE 'https://github.com'.
     CONSTANTS api              TYPE string VALUE 'https://api.github.com'.
@@ -226,6 +259,11 @@ CLASS zcl_tr_auth DEFINITION
     CLASS-METHODS read_record
       RETURNING
         VALUE(result) TYPE ty_record.
+    CLASS-METHODS event_secret
+      RETURNING
+        VALUE(result) TYPE xstring
+      RAISING
+        zcx_abapgit_exception.
     CLASS-METHODS encryption_key
       RETURNING
         VALUE(result) TYPE xstring
@@ -550,6 +588,100 @@ CLASS ZCL_TR_AUTH IMPLEMENTATION.
   METHOD remove.
     DATA(id) = token_id( ).
     DELETE FROM DATABASE indx(zt) ID id.
+  ENDMETHOD.
+
+
+  METHOD store_event_secret.
+    DATA ciphertext TYPE xstring.
+    DATA header     TYPE indx.
+
+    IF strlen( secret ) < min_secret_length.
+      zcx_abapgit_exception=>raise( |the secret must have at least { min_secret_length } characters| ).
+    ENDIF.
+
+    TRY.
+        cl_sec_sxml_writer=>encrypt(
+          EXPORTING
+            plaintext  = cl_abap_codepage=>convert_to( secret )
+            key        = encryption_key( )
+            algorithm  = cl_sec_sxml_writer=>co_aes256_algorithm_pem
+          IMPORTING
+            ciphertext = ciphertext ).
+      CATCH cx_sec_sxml_encrypt_error INTO DATA(error).
+        zcx_abapgit_exception=>raise( |the secret could not be encrypted: { error->get_text( ) }| ).
+    ENDTRY.
+
+    header-aedat = sy-datum.
+    header-usera = sy-uname.
+    EXPORT secret = ciphertext TO DATABASE indx(zt) FROM header ID event_secret_id.
+    IF sy-subrc <> 0.
+      zcx_abapgit_exception=>raise( |the secret could not be stored (INDX { area })| ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD has_event_secret.
+    DATA ciphertext TYPE xstring.
+
+    IMPORT secret = ciphertext FROM DATABASE indx(zt) ID event_secret_id.
+    result = xsdbool( sy-subrc = 0 AND ciphertext IS NOT INITIAL ).
+  ENDMETHOD.
+
+
+  METHOD event_secret.
+    DATA ciphertext TYPE xstring.
+
+    IMPORT secret = ciphertext FROM DATABASE indx(zt) ID event_secret_id.
+    IF sy-subrc <> 0 OR ciphertext IS INITIAL.
+      zcx_abapgit_exception=>raise( |no secret for the merge event on { sy-sysid }. | &&
+                                    |Run report ZTR_SET_EVENT_SECRET once (SE38)| ).
+    ENDIF.
+
+    TRY.
+        cl_sec_sxml_writer=>decrypt(
+          EXPORTING
+            ciphertext = ciphertext
+            key        = encryption_key( )
+            algorithm  = cl_sec_sxml_writer=>co_aes256_algorithm_pem
+          IMPORTING
+            plaintext  = result ).
+      CATCH cx_sec_sxml_encrypt_error INTO DATA(error).
+        zcx_abapgit_exception=>raise( |the secret for the merge event cannot be read: { error->get_text( ) }| ).
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD sign_release_event.
+    DATA mac TYPE string.
+
+    DATA(newline) = cl_abap_char_utilities=>newline.
+    DATA(text) = |{ request }{ newline }{ pull_request }{ newline }{ sha }{ newline }{ timestamp }| &&
+                 |{ newline }{ title }{ newline }{ message }|.
+
+    TRY.
+        cl_abap_hmac=>calculate_hmac_for_raw(
+          EXPORTING
+            if_algorithm  = 'SHA256'
+            if_key        = event_secret( )
+            if_data       = cl_abap_codepage=>convert_to( text )
+          IMPORTING
+            ef_hmacstring = mac ).
+      CATCH cx_abap_message_digest INTO DATA(error).
+        zcx_abapgit_exception=>raise( |the merge event could not be signed: { error->get_text( ) }| ).
+    ENDTRY.
+    result = to_lower( mac ).
+  ENDMETHOD.
+
+
+  METHOD now_in_seconds.
+    DATA now     TYPE timestamp.
+    DATA seconds TYPE p LENGTH 15 DECIMALS 0.
+
+    GET TIME STAMP FIELD now.
+    seconds = cl_abap_tstmp=>subtract(
+      tstmp1 = now
+      tstmp2 = '19700101000000' ).
+    result = |{ seconds }|.
   ENDMETHOD.
 
 
