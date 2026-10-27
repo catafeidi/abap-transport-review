@@ -46,6 +46,11 @@ CLASS zcl_tr_transl_check DEFINITION
         object          TYPE trobjtype,
         obj_name        TYPE trobj_name,
         devclass        TYPE devclass,
+        " Whom to ask: the person responsible for the object, and who
+        " changed the text (a message) or the object last.
+        responsible     TYPE responsibl,
+        changed_by      TYPE as4user,
+        changed_on      TYPE as4date,
         lxe_type        TYPE lxeobjtype,
         lxe_name        TYPE lxeobjname,
         text_kind       TYPE c LENGTH 40,
@@ -61,6 +66,12 @@ CLASS zcl_tr_transl_check DEFINITION
         max_length      TYPE lxeunitmlt,
       END OF ty_finding.
     TYPES ty_findings TYPE STANDARD TABLE OF ty_finding WITH DEFAULT KEY.
+    TYPES:
+      BEGIN OF ty_change,
+        responsible TYPE responsibl,
+        changed_by  TYPE as4user,
+        changed_on  TYPE as4date,
+      END OF ty_change.
     TYPES:
       BEGIN OF ty_write_result,
         written  TYPE i,
@@ -208,6 +219,23 @@ CLASS zcl_tr_transl_check DEFINITION
         links         TYPE ty_package_links
       RETURNING
         VALUE(result) TYPE ty_packages.
+    "! The number of a message from its SE63 name, which is the message
+    "! class (20 characters) and the number: /MYNS/CORE          001 is 001.
+    "! Empty for the other SE63 types.
+    CLASS-METHODS message_number
+      IMPORTING
+        lxe_type      TYPE lxeobjtype
+        lxe_name      TYPE csequence
+      RETURNING
+        VALUE(result) TYPE msgnr.
+    "! The table in which SAP keeps who changed an object of this type
+    "! last, and when: T100A, DD04L, SEOCLASSDF, REPOSRC, ... Empty when
+    "! there is none (transactions, OTR, Web Dynpro, ...).
+    CLASS-METHODS change_table
+      IMPORTING
+        object_type   TYPE trobjtype
+      RETURNING
+        VALUE(result) TYPE tabname.
 
     "! @parameter languages | the required languages; empty = the configured ones
     "! @parameter exclusions | object names to skip; empty = the configured ones
@@ -319,6 +347,16 @@ CLASS zcl_tr_transl_check DEFINITION
         any_package   TYPE abap_bool DEFAULT abap_false
       RETURNING
         VALUE(result) TYPE ty_objects.
+    "! Who is responsible for an object (TADIR) and who changed it last
+    "! (see CHANGE_TABLE). Read once per object.
+    "! @parameter message_number | for a message class: who changed this
+    "!                             message (T100U), not the class
+    METHODS change_of
+      IMPORTING
+        object         TYPE ty_object
+        message_number TYPE msgnr OPTIONAL
+      RETURNING
+        VALUE(result)  TYPE ty_change.
 
   PRIVATE SECTION.
     " TLGS (SE63 type of many repository objects): the object type at the
@@ -342,10 +380,19 @@ CLASS zcl_tr_transl_check DEFINITION
     TYPES ty_pairs TYPE STANDARD TABLE OF lxe_pcx_s1 WITH DEFAULT KEY.
     TYPES ty_collection TYPE STANDARD TABLE OF lxe_colob WITH DEFAULT KEY.
 
+    TYPES:
+      BEGIN OF ty_known_change,
+        object         TYPE trobjtype,
+        obj_name       TYPE trobj_name,
+        message_number TYPE msgnr,
+        change         TYPE ty_change,
+      END OF ty_known_change.
+
     DATA languages       TYPE ty_language_map.
     DATA exclusions      TYPE ty_name_range.
     DATA package_pattern TYPE devclass.
     DATA all_texts       TYPE abap_bool.
+    DATA known_changes   TYPE HASHED TABLE OF ty_known_change WITH UNIQUE KEY object obj_name message_number.
 
     CLASS-METHODS select_option
       IMPORTING
@@ -614,6 +661,120 @@ CLASS zcl_tr_transl_check IMPLEMENTATION.
         result = xsdbool( strlen( lxe_type ) = 4 AND ( lxe_type CP 'RPT+' OR lxe_type CP 'SRT+' ) OR
                           strlen( lxe_type ) = 3 AND lxe_type CP 'CA+' AND lxe_type+2(1) CO '0123456789' ).
     ENDCASE.
+  ENDMETHOD.
+
+
+  METHOD message_number.
+    DATA(name) = CONV string( lxe_name ).
+    IF lxe_type <> 'MESS' OR strlen( name ) <= 20.
+      RETURN.
+    ENDIF.
+    DATA(number) = substring( val = name off = 20 ).
+    IF strlen( number ) = 3 AND number CO '0123456789'.
+      result = number.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD change_table.
+    result = SWITCH #( object_type
+      WHEN 'MSAG' THEN 'T100A'
+      WHEN 'DTEL' THEN 'DD04L'
+      WHEN 'DOMA' THEN 'DD01L'
+      WHEN 'TABL' THEN 'DD02L'
+      WHEN 'TTYP' THEN 'DD40L'
+      WHEN 'VIEW' THEN 'DD25L'
+      WHEN 'DDLS' THEN 'DDDDLSRC'
+      WHEN 'CLAS' OR 'INTF' THEN 'SEOCLASSDF'
+      WHEN 'PROG' OR 'FUGR' THEN 'REPOSRC' ).
+  ENDMETHOD.
+
+
+  METHOD change_of.
+    READ TABLE known_changes INTO DATA(known)
+      WITH TABLE KEY object = object-object obj_name = object-obj_name message_number = message_number.
+    IF sy-subrc = 0.
+      result = known-change.
+      RETURN.
+    ENDIF.
+
+    SELECT SINGLE author FROM tadir
+      INTO @result-responsible
+      WHERE pgmid    = 'R3TR'
+        AND object   = @object-object
+        AND obj_name = @object-obj_name.
+
+    CASE change_table( object-object ).
+      WHEN 'T100A'.
+        DATA(message_class) = CONV arbgb( object-obj_name ).
+        IF message_number IS NOT INITIAL.
+          SELECT SINGLE name, datum FROM t100u
+            INTO (@result-changed_by, @result-changed_on)
+            WHERE arbgb = @message_class
+              AND msgnr = @message_number.
+        ENDIF.
+        IF result-changed_by IS INITIAL.
+          SELECT SINGLE lastuser, ldate FROM t100a
+            INTO (@result-changed_by, @result-changed_on)
+            WHERE arbgb = @message_class.
+        ENDIF.
+      WHEN 'DD04L'.
+        DATA(data_element) = CONV rollname( object-obj_name ).
+        SELECT SINGLE as4user, as4date FROM dd04l
+          INTO (@result-changed_by, @result-changed_on)
+          WHERE rollname = @data_element
+            AND as4local = 'A'
+            AND as4vers  = '0000'.
+      WHEN 'DD01L'.
+        DATA(domain) = CONV domname( object-obj_name ).
+        SELECT SINGLE as4user, as4date FROM dd01l
+          INTO (@result-changed_by, @result-changed_on)
+          WHERE domname  = @domain
+            AND as4local = 'A'
+            AND as4vers  = '0000'.
+      WHEN 'DD02L'.
+        DATA(table) = CONV tabname( object-obj_name ).
+        SELECT SINGLE as4user, as4date FROM dd02l
+          INTO (@result-changed_by, @result-changed_on)
+          WHERE tabname  = @table
+            AND as4local = 'A'
+            AND as4vers  = '0000'.
+      WHEN 'DD40L'.
+        DATA(table_type) = CONV ttypename( object-obj_name ).
+        SELECT SINGLE as4user, as4date FROM dd40l
+          INTO (@result-changed_by, @result-changed_on)
+          WHERE typename = @table_type
+            AND as4local = 'A'.
+      WHEN 'DD25L'.
+        DATA(view) = CONV viewname( object-obj_name ).
+        SELECT SINGLE as4user, as4date FROM dd25l
+          INTO (@result-changed_by, @result-changed_on)
+          WHERE viewname = @view
+            AND as4local = 'A'
+            AND as4vers  = '0000'.
+      WHEN 'DDDDLSRC'.
+        DATA(cds_source) = CONV ddlname( object-obj_name ).
+        SELECT SINGLE as4user, as4date FROM ddddlsrc
+          INTO (@result-changed_by, @result-changed_on)
+          WHERE ddlname  = @cds_source
+            AND as4local = 'A'.
+      WHEN 'SEOCLASSDF'.
+        DATA(class) = CONV seoclsname( object-obj_name ).
+        SELECT SINGLE changedby, changedon FROM seoclassdf
+          INTO (@result-changed_by, @result-changed_on)
+          WHERE clsname = @class
+            AND version = '1'.
+      WHEN 'REPOSRC'.
+        " The main program, whose text pool holds the text elements.
+        DATA(program) = main_program( object ).
+        SELECT SINGLE unam, udat FROM reposrc
+          INTO (@result-changed_by, @result-changed_on)
+          WHERE progname = @program
+            AND r3state  = 'A'.
+    ENDCASE.
+
+    INSERT VALUE #( object = object-object obj_name = object-obj_name message_number = message_number
+                    change = result ) INTO TABLE known_changes.
   ENDMETHOD.
 
 

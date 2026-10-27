@@ -20,6 +20,19 @@ The source language is the original language of the object: the logon language o
 
 The language in the status is the language the translation is missing in; the text that exists is in the column Source text, in the source language.
 
+Each line names whom to ask about the text: **Person responsible** (`TADIR-AUTHOR`), and **Last changed by** with **Changed on**, as SAP keeps them for the type:
+
+| Type | Last change from | Level |
+|---|---|---|
+| message class | `T100U` | the message itself; `T100A` (the class) when the message has no record |
+| data element, domain, table, table type, view | `DD04L`, `DD01L`, `DD02L`, `DD40L`, `DD25L` | object |
+| CDS view | `DDDDLSRC` | object |
+| class, interface | `SEOCLASSDF` | object |
+| program, function group | `REPOSRC` of the main program | object |
+| other types (transactions, OTR, Web Dynpro, UI5 apps, ...) | none: the column stays empty | |
+
+The file that is downloaded for translators does not have these columns.
+
 ## Which texts
 
 Only the texts the user sees when the product runs are required. Development itself may be in one language only: a class description or a method description that nobody but a developer reads does not need a translation.

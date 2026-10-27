@@ -392,6 +392,17 @@ CLASS lcl_report IMPLEMENTATION.
     IF p_ui5 = abap_true AND only_listed = abap_true.
       add_ui5_texts( objects = objects languages = languages ).
     ENDIF.
+    " Whom to ask about each text: the person responsible for the object
+    " and who changed it (for a message: the message) last.
+    LOOP AT list ASSIGNING FIELD-SYMBOL(<line>).
+      DATA(change) = check->change_of(
+        object         = VALUE #( object = <line>-object obj_name = <line>-obj_name )
+        message_number = zcl_tr_transl_check=>message_number( lxe_type = <line>-lxe_type
+                                                              lxe_name = <line>-lxe_name ) ).
+      <line>-responsible = change-responsible.
+      <line>-changed_by  = change-changed_by.
+      <line>-changed_on  = change-changed_on.
+    ENDLOOP.
     SORT list BY object obj_name language text_key source_line.
     original = list.
 
@@ -930,6 +941,15 @@ CLASS lcl_report IMPLEMENTATION.
         columns->get_column( 'LOCATION' )->set_long_text( 'Where (include and line, or entry)' ).
         columns->get_column( 'LOCATION' )->set_medium_text( 'Where' ).
         columns->get_column( 'LOCATION' )->set_short_text( 'Where' ).
+        columns->get_column( 'RESPONSIBLE' )->set_long_text( 'Person responsible' ).
+        columns->get_column( 'RESPONSIBLE' )->set_medium_text( 'Responsible' ).
+        columns->get_column( 'RESPONSIBLE' )->set_short_text( 'Respons.' ).
+        columns->get_column( 'CHANGED_BY' )->set_long_text( 'Last changed by' ).
+        columns->get_column( 'CHANGED_BY' )->set_medium_text( 'Last changed by' ).
+        columns->get_column( 'CHANGED_BY' )->set_short_text( 'Changed by' ).
+        columns->get_column( 'CHANGED_ON' )->set_long_text( 'Last changed on' ).
+        columns->get_column( 'CHANGED_ON' )->set_medium_text( 'Last changed on' ).
+        columns->get_column( 'CHANGED_ON' )->set_short_text( 'Changed on' ).
         columns->get_column( 'STATUS' )->set_technical( abap_true ).
         columns->get_column( 'CUSTMNR' )->set_technical( abap_true ).
         columns->get_column( 'SOURCE_ISO' )->set_technical( abap_true ).
@@ -971,7 +991,10 @@ CLASS lcl_report IMPLEMENTATION.
       ( fieldname = 'SOURCE_LANGUAGE' coltext = 'Source language' outputlen = 6 )
       ( fieldname = 'LXE_TYPE'        coltext = 'SE63 type'       outputlen = 6 )
       ( fieldname = 'LXE_NAME'        coltext = 'SE63 name'       outputlen = 40 )
-      ( fieldname = 'TEXT_KEY'        coltext = 'Text key'        outputlen = 20 ) ).
+      ( fieldname = 'TEXT_KEY'        coltext = 'Text key'        outputlen = 20 )
+      ( fieldname = 'RESPONSIBLE'     coltext = 'Responsible'     outputlen = 12 )
+      ( fieldname = 'CHANGED_BY'      coltext = 'Last changed by' outputlen = 12 )
+      ( fieldname = 'CHANGED_ON'      coltext = 'Changed on'      outputlen = 10 datatype = 'DATS' inttype = 'D' ) ).
     layout-grid_title = CONV lvc_title( |{ title }. Type the translations, then Save| ).
     layout-zebra      = abap_true.
 

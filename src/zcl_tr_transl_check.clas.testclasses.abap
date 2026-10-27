@@ -191,6 +191,71 @@ CLASS ltc_subpackages IMPLEMENTATION.
 ENDCLASS.
 
 
+" Whom to ask about a text: where the last change of an object is kept,
+" and which message of a message class a text of SE63 is.
+CLASS ltc_changes DEFINITION FINAL FOR TESTING
+  RISK LEVEL HARMLESS
+  DURATION SHORT.
+
+  PRIVATE SECTION.
+    METHODS number_of_a_message FOR TESTING.
+    METHODS number_with_long_class FOR TESTING.
+    METHODS no_number_for_other_types FOR TESTING.
+    METHODS no_number_without_one FOR TESTING.
+    METHODS tables_of_the_types FOR TESTING.
+    METHODS no_table_for_other_types FOR TESTING.
+ENDCLASS.
+
+
+CLASS ltc_changes IMPLEMENTATION.
+
+  METHOD number_of_a_message.
+    cl_abap_unit_assert=>assert_equals(
+      act = zcl_tr_transl_check=>message_number( lxe_type = 'MESS' lxe_name = '/MYNS/CORE          001' )
+      exp = '001' ).
+  ENDMETHOD.
+
+
+  METHOD number_with_long_class.
+    cl_abap_unit_assert=>assert_equals(
+      act = zcl_tr_transl_check=>message_number( lxe_type = 'MESS' lxe_name = '/MYNS/TRANSL_MESSAGE042' )
+      exp = '042' ).
+  ENDMETHOD.
+
+
+  METHOD no_number_for_other_types.
+    cl_abap_unit_assert=>assert_initial(
+      zcl_tr_transl_check=>message_number( lxe_type = 'DTEL' lxe_name = '/MYNS/DATA_ELEMENT001' ) ).
+  ENDMETHOD.
+
+
+  METHOD no_number_without_one.
+    cl_abap_unit_assert=>assert_initial(
+      zcl_tr_transl_check=>message_number( lxe_type = 'MESS' lxe_name = '/MYNS/CORE' ) ).
+    cl_abap_unit_assert=>assert_initial(
+      zcl_tr_transl_check=>message_number( lxe_type = 'MESS' lxe_name = '/MYNS/CORE          0A1' ) ).
+  ENDMETHOD.
+
+
+  METHOD tables_of_the_types.
+    cl_abap_unit_assert=>assert_equals( act = zcl_tr_transl_check=>change_table( 'MSAG' ) exp = 'T100A' ).
+    cl_abap_unit_assert=>assert_equals( act = zcl_tr_transl_check=>change_table( 'DTEL' ) exp = 'DD04L' ).
+    cl_abap_unit_assert=>assert_equals( act = zcl_tr_transl_check=>change_table( 'DOMA' ) exp = 'DD01L' ).
+    cl_abap_unit_assert=>assert_equals( act = zcl_tr_transl_check=>change_table( 'TABL' ) exp = 'DD02L' ).
+    cl_abap_unit_assert=>assert_equals( act = zcl_tr_transl_check=>change_table( 'DDLS' ) exp = 'DDDDLSRC' ).
+    cl_abap_unit_assert=>assert_equals( act = zcl_tr_transl_check=>change_table( 'CLAS' ) exp = 'SEOCLASSDF' ).
+    cl_abap_unit_assert=>assert_equals( act = zcl_tr_transl_check=>change_table( 'FUGR' ) exp = 'REPOSRC' ).
+  ENDMETHOD.
+
+
+  METHOD no_table_for_other_types.
+    cl_abap_unit_assert=>assert_initial( zcl_tr_transl_check=>change_table( 'TRAN' ) ).
+    cl_abap_unit_assert=>assert_initial( zcl_tr_transl_check=>change_table( 'WAPA' ) ).
+  ENDMETHOD.
+
+ENDCLASS.
+
+
 " Which SE63 texts the user sees when the product runs. TLGS is one
 " SE63 type for many repository objects; the object type at the start of
 " its name decides.
