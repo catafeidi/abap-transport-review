@@ -34,6 +34,13 @@ CLASS zcl_tr_transl_check DEFINITION
         obj_name TYPE trobj_name,
       END OF ty_object.
     TYPES ty_objects TYPE SORTED TABLE OF ty_object WITH UNIQUE KEY object obj_name.
+    TYPES ty_packages TYPE SORTED TABLE OF devclass WITH UNIQUE KEY table_line.
+    TYPES:
+      BEGIN OF ty_package_link,
+        package TYPE devclass,
+        parent  TYPE devclass,
+      END OF ty_package_link.
+    TYPES ty_package_links TYPE STANDARD TABLE OF ty_package_link WITH DEFAULT KEY.
     TYPES:
       BEGIN OF ty_finding,
         object          TYPE trobjtype,
@@ -191,6 +198,16 @@ CLASS zcl_tr_transl_check DEFINITION
         findings      TYPE zcl_tr_transl_ui5=>ty_findings
       RETURNING
         VALUE(result) TYPE ty_findings.
+    "! The packages and every package below them in the package hierarchy,
+    "! whatever their names. A loop in the hierarchy ends the walk.
+    "! @parameter links | each package with its super package, as TDEVC
+    "!                    holds them (PARENTCL)
+    CLASS-METHODS with_subpackages
+      IMPORTING
+        packages      TYPE ty_packages
+        links         TYPE ty_package_links
+      RETURNING
+        VALUE(result) TYPE ty_packages.
 
     "! @parameter languages | the required languages; empty = the configured ones
     "! @parameter exclusions | object names to skip; empty = the configured ones
@@ -275,6 +292,13 @@ CLASS zcl_tr_transl_check DEFINITION
         VALUE(result) TYPE ty_objects.
     "! The repository objects of the packages that match the pattern.
     METHODS package_objects
+      IMPORTING
+        package_pattern TYPE devclass
+      RETURNING
+        VALUE(result)   TYPE ty_objects.
+    "! The repository objects of the packages that match the pattern and
+    "! of every package below them, whatever their names (sub-packages).
+    METHODS package_tree_objects
       IMPORTING
         package_pattern TYPE devclass
       RETURNING
@@ -703,6 +727,55 @@ CLASS zcl_tr_transl_check IMPLEMENTATION.
     LOOP AT entries INTO DATA(entry).
       INSERT VALUE #( object = entry-object obj_name = entry-obj_name ) INTO TABLE result.
     ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD package_tree_objects.
+    DATA matching TYPE ty_packages.
+    DATA links    TYPE ty_package_links.
+
+    DATA(pattern) = like_pattern( package_pattern ).
+    SELECT devclass FROM tdevc
+      INTO TABLE @matching
+      WHERE devclass LIKE @pattern.
+    IF matching IS INITIAL.
+      RETURN.
+    ENDIF.
+    " The whole hierarchy at once: PARENTCL has no index, so one read is
+    " cheaper than one read per level.
+    SELECT devclass AS package, parentcl AS parent FROM tdevc
+      INTO CORRESPONDING FIELDS OF TABLE @links
+      WHERE parentcl <> @space.
+    DATA(packages) = with_subpackages( packages = matching links = links ).
+
+    SELECT object, obj_name FROM tadir
+      INTO TABLE @DATA(entries)
+      FOR ALL ENTRIES IN @packages
+      WHERE pgmid    = 'R3TR'
+        AND devclass = @packages-table_line
+        AND delflag  = @space.
+    LOOP AT entries INTO DATA(entry).
+      INSERT VALUE #( object = entry-object obj_name = entry-obj_name ) INTO TABLE result.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD with_subpackages.
+    DATA parents TYPE ty_packages.
+
+    result = packages.
+    DATA(level) = packages.
+    WHILE level IS NOT INITIAL.
+      parents = level.
+      CLEAR level.
+      LOOP AT links INTO DATA(link).
+        IF line_exists( parents[ table_line = link-parent ] )
+           AND NOT line_exists( result[ table_line = link-package ] ).
+          INSERT link-package INTO TABLE result.
+          INSERT link-package INTO TABLE level.
+        ENDIF.
+      ENDLOOP.
+    ENDWHILE.
   ENDMETHOD.
 
 

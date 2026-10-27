@@ -97,7 +97,8 @@ A language is added later by adding a row to `ZTR_TRANSL_LANGUAGES` (in `ZTR_SET
 |---|---|
 | Task or request | its objects and those of its tasks, exactly as the release check sees them |
 | Namespaces (run all) | every object whose name starts with one of them, in any package that is not local. Filled with the namespaces of the package pattern, for example `/MYNS/` for `/MYNS/*` |
-| Packages (if no namespace) | every object of the packages that match the pattern |
+| Packages (if no namespace) | every object of the packages that match the pattern. Clear the namespaces to use it |
+| Include sub-packages | ticked (default): also every package below them in the package hierarchy, whatever its name. Not ticked: only the packages whose names match, so `/MYNS/API*` finds `/MYNS/API_CORE` but not a sub-package `/MYNS/HTTP` |
 | Languages | empty: the required languages from STVARV |
 | Show also | translations that are the same as the source text; objects SE63 could not read; descriptions that only developers see (see "Which texts"); hardcoded texts, table entries and texts of UI5 apps (all ticked by default, only in the list without "Enter translations"; the hardcoded texts also go into the sheet "Hardcoded texts" of the downloaded file) |
 | Enter translations | the column Translation can be typed in; Save writes the translations |

@@ -118,6 +118,79 @@ CLASS ltc_record IMPLEMENTATION.
 ENDCLASS.
 
 
+" Sub-packages are found by the package hierarchy, not by their names.
+CLASS ltc_subpackages DEFINITION FINAL FOR TESTING
+  RISK LEVEL HARMLESS
+  DURATION SHORT.
+
+  PRIVATE SECTION.
+    " /MYNS/SE_API > /MYNS/SE_HTTP > /MYNS/SE_HTTP_TEST, and /MYNS/OTHER beside.
+    METHODS hierarchy
+      RETURNING
+        VALUE(result) TYPE zcl_tr_transl_check=>ty_package_links.
+    METHODS packages
+      IMPORTING
+        names         TYPE string_table
+      RETURNING
+        VALUE(result) TYPE zcl_tr_transl_check=>ty_packages.
+    METHODS child_with_another_name FOR TESTING.
+    METHODS grandchild_is_found FOR TESTING.
+    METHODS other_packages_stay_out FOR TESTING.
+    METHODS loop_in_hierarchy_ends FOR TESTING.
+ENDCLASS.
+
+
+CLASS ltc_subpackages IMPLEMENTATION.
+
+  METHOD hierarchy.
+    result = VALUE #( ( package = '/MYNS/SE_HTTP'      parent = '/MYNS/SE_API' )
+                      ( package = '/MYNS/SE_HTTP_TEST' parent = '/MYNS/SE_HTTP' )
+                      ( package = '/MYNS/OTHER'        parent = '/MYNS/MAIN' ) ).
+  ENDMETHOD.
+
+
+  METHOD packages.
+    LOOP AT names INTO DATA(name).
+      INSERT CONV devclass( name ) INTO TABLE result.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD child_with_another_name.
+    DATA(result) = zcl_tr_transl_check=>with_subpackages( packages = packages( VALUE #( ( `/MYNS/SE_API` ) ) )
+                                                          links    = hierarchy( ) ).
+    cl_abap_unit_assert=>assert_true( xsdbool( line_exists( result[ table_line = '/MYNS/SE_HTTP' ] ) ) ).
+  ENDMETHOD.
+
+
+  METHOD grandchild_is_found.
+    DATA(result) = zcl_tr_transl_check=>with_subpackages( packages = packages( VALUE #( ( `/MYNS/SE_API` ) ) )
+                                                          links    = hierarchy( ) ).
+    cl_abap_unit_assert=>assert_equals(
+      act = result
+      exp = packages( VALUE #( ( `/MYNS/SE_API` ) ( `/MYNS/SE_HTTP` ) ( `/MYNS/SE_HTTP_TEST` ) ) ) ).
+  ENDMETHOD.
+
+
+  METHOD other_packages_stay_out.
+    DATA(result) = zcl_tr_transl_check=>with_subpackages( packages = packages( VALUE #( ( `/MYNS/SE_HTTP` ) ) )
+                                                          links    = hierarchy( ) ).
+    cl_abap_unit_assert=>assert_equals( act = result
+                                        exp = packages( VALUE #( ( `/MYNS/SE_HTTP` ) ( `/MYNS/SE_HTTP_TEST` ) ) ) ).
+  ENDMETHOD.
+
+
+  METHOD loop_in_hierarchy_ends.
+    DATA(result) = zcl_tr_transl_check=>with_subpackages(
+      packages = packages( VALUE #( ( `ZA` ) ) )
+      links    = VALUE #( ( package = 'ZB' parent = 'ZA' ) ( package = 'ZA' parent = 'ZB' ) ) ).
+    cl_abap_unit_assert=>assert_equals( act = result
+                                        exp = packages( VALUE #( ( `ZA` ) ( `ZB` ) ) ) ).
+  ENDMETHOD.
+
+ENDCLASS.
+
+
 " Which SE63 texts the user sees when the product runs. TLGS is one
 " SE63 type for many repository objects; the object type at the start of
 " its name decides.

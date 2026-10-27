@@ -12,7 +12,9 @@
 *&     starts with one of them, in any package that is not local. By
 *&     default the namespaces of the packages under Git (STVARV
 *&     ZTR_PACKAGES): /MYNS/ and /MYNS2/, /MYNS/;
-*&   - packages: every object of the packages that match the pattern.
+*&   - packages: every object of the packages that match the pattern,
+*&     and with "Include sub-packages" (the default) also of every
+*&     package below them in the package hierarchy, whatever its name.
 *& The languages come from STVARV ZTR_TRANSL_LANGUAGES unless others are
 *& entered; object names in STVARV ZTR_TRANSL_EXCLUDE are skipped. Both
 *& are written by report ZTR_SETUP.
@@ -94,6 +96,11 @@ SELECTION-SCREEN END OF LINE.
 SELECTION-SCREEN BEGIN OF LINE.
 SELECTION-SCREEN COMMENT 1(40) t_pack FOR FIELD p_pack.
 PARAMETERS p_pack TYPE devclass.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN BEGIN OF LINE.
+SELECTION-SCREEN POSITION 42.
+PARAMETERS p_sub AS CHECKBOX DEFAULT 'X'.
+SELECTION-SCREEN COMMENT 45(30) t_sub FOR FIELD p_sub.
 SELECTION-SCREEN END OF LINE.
 SELECTION-SCREEN BEGIN OF LINE.
 SELECTION-SCREEN COMMENT 1(40) t_lang FOR FIELD s_lang.
@@ -357,6 +364,11 @@ CLASS lcl_report IMPLEMENTATION.
         INSERT LINES OF namespace_objects INTO TABLE objects.
         scope = COND #( WHEN scope IS INITIAL THEN |namespace { namespace-low }| ELSE |{ scope }, { namespace-low }| ).
       ENDLOOP.
+    ELSEIF p_sub = abap_true.
+      " Sub-packages need not match the pattern: any package is accepted.
+      objects = check->objects_in_scope( objects     = check->package_tree_objects( pattern )
+                                         any_package = abap_true ).
+      scope = |packages { pattern } with sub-packages|.
     ELSE.
       objects = check->objects_in_scope( check->package_objects( pattern ) ).
       scope = |packages { pattern }|.
@@ -1145,6 +1157,7 @@ INITIALIZATION.
   t_trkorr = 'Task or request (empty: namespaces)'.
   t_nspc   = 'Namespaces (run all)'.
   t_pack   = 'Packages (if no namespace)'.
+  t_sub    = 'Include sub-packages'.
   t_lang   = 'Languages (empty: from STVARV)'.
   t_editb  = 'Translate in the list'.
   t_edit   = 'Enter translations: Save writes them as SE63 does'.
