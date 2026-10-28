@@ -1,6 +1,31 @@
-# abap-transport-review
+<p align="center"><img src="docs/images/banner.jpg" alt="ABAP Transport Review: code review for ABAP transports with GitHub pull requests" width="100%"></p>
 
-**Reviewed, traceable and controlled transports for SAP ABAP development.**
+<h1 align="center">ABAP Transport Review</h1>
+
+<p align="center"><b>Reviewed, traceable and controlled transports for SAP ABAP development.</b></p>
+
+<p align="center">
+Releasing a task opens a GitHub pull request. Releasing the request needs it approved by a
+colleague. Every change is reviewed on a diff, recorded in Git and linked to its issue.
+</p>
+
+<p align="center">
+<a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/catafeidi/abap-transport-review"></a>
+<img alt="Last commit" src="https://img.shields.io/github/last-commit/catafeidi/abap-transport-review">
+<img alt="SAP NetWeaver" src="https://img.shields.io/badge/SAP%20NetWeaver-7.40%20SP08%2B-0a6ed1">
+<img alt="Built on" src="https://img.shields.io/badge/built%20on-abapGit%20%7C%20abaplint%20%7C%20GitHub-0a7d4f">
+</p>
+
+<p align="center">
+<a href="#quick-start">Quick start</a> ·
+<a href="#how-it-works">How it works</a> ·
+<a href="#the-flow">The flow</a> ·
+<a href="docs/INSTALL.md">Install guide</a> ·
+<a href="docs/WORKFLOW.md">Workflow</a> ·
+<a href="#feedback-and-contributions">Contributing</a>
+</p>
+
+---
 
 This project connects the SAP transport system with GitHub pull requests. Releasing a task commits its objects to a review branch and opens a pull request. A request cannot be released until a colleague has approved that pull request, and the release of the request merges it. Exceptions are explicit and visible: the marker `#NOREVIEW` in the request text, the switch `ZTR_DISABLED`, and a failure of the check itself, which never stops a release. See [docs/WORKFLOW.md](docs/WORKFLOW.md).
 
