@@ -932,13 +932,17 @@ CLASS ZCL_TR_AUTH IMPLEMENTATION.
 
 
   METHOD now_in_seconds.
+    " Both time stamps must be typed: CL_ABAP_TSTMP=>SUBTRACT takes a generic
+    " TYPE p, so a text literal arrives as P LENGTH 16 and the method raises
+    " CX_PARAMETER_INVALID_TYPE (only TIMESTAMP or TIMESTAMPL are accepted).
+    CONSTANTS start_of_1970 TYPE timestamp VALUE '19700101000000'.
     DATA now     TYPE timestamp.
     DATA seconds TYPE p LENGTH 15 DECIMALS 0.
 
     GET TIME STAMP FIELD now.
     seconds = cl_abap_tstmp=>subtract(
       tstmp1 = now
-      tstmp2 = '19700101000000' ).
+      tstmp2 = start_of_1970 ).
     result = |{ seconds }|.
   ENDMETHOD.
 

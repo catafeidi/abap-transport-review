@@ -271,3 +271,34 @@ CLASS ltc_tokens IMPLEMENTATION.
   ENDMETHOD.
 
 ENDCLASS.
+
+
+" The time in the signed merge event. A text literal for the start of 1970
+" once made it dump (CX_PARAMETER_INVALID_TYPE) before the event was sent.
+CLASS ltc_event_time DEFINITION FINAL FOR TESTING
+  DURATION SHORT
+  RISK LEVEL HARMLESS.
+
+  PRIVATE SECTION.
+    METHODS seconds_since_1970 FOR TESTING.
+ENDCLASS.
+
+
+CLASS ltc_event_time IMPLEMENTATION.
+
+  METHOD seconds_since_1970.
+    " 1 January 2026 = 1767225600, 1 January 2100 = 4102444800.
+    DATA seconds TYPE p LENGTH 15 DECIMALS 0.
+
+    DATA(result) = zcl_tr_auth=>now_in_seconds( ).
+
+    cl_abap_unit_assert=>assert_true(
+      act = xsdbool( result CO '0123456789' )
+      msg = |only digits expected, got "{ result }"| ).
+    seconds = result.
+    cl_abap_unit_assert=>assert_true(
+      act = xsdbool( seconds BETWEEN 1767225600 AND 4102444800 )
+      msg = |seconds since 1970 expected, got { result }| ).
+  ENDMETHOD.
+
+ENDCLASS.
